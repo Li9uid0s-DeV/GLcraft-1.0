@@ -28,9 +28,12 @@ jobs:
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
+        continue-on-error: true
+        with:
+          enablement: true
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --legacy-peer-deps --no-audit --no-fund
 
       - name: "Build static bundle for GitHub Pages"
         run: |

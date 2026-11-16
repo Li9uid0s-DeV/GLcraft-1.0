@@ -158,8 +158,12 @@ jobs:
         with:
           node-version: "22"
       - uses: actions/configure-pages@v5
-      - run: npm install --no-audit --no-fund
-      - run: |
+        continue-on-error: true
+        with:
+          enablement: true
+      - run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: "Build static bundle for GitHub Pages"
+        run: |
           npm run build
           rm -f dist/gh-pages-bundle.js dist/gh-pages-bundle.css
           cp dist/index.html dist/404.html
