@@ -1,0 +1,38 @@
+{
+  "schema_version": "26.3.0",
+  "engine": "voxelcraft-wasm-26.3",
+  "mods": [
+    {
+      "id": "vanilla_26_3",
+      "name": "Minecraft 26.3: Wilderness Bound (Base)",
+      "version": "26.3.0",
+      "enabled": true,
+      "author": "Mojang / VoxelCraft",
+      "description": "Dappled Forest biome, Poplar wood set, Red Shrubs, Bracket Fungi, Straw Bed, 16 Cushions, Wool/Concrete Stairs & Slabs, Abandoned Camp & Explorer Maps.",
+      "manifest": "builtin"
+    },
+    {
+      "id": "megatnt",
+      "name": "Mega TNT Pack",
+      "version": "1.4.0",
+      "enabled": true,
+      "author": "VoxelCraft Modding Team",
+      "description": "Adds 5x, 10x, 50x, and 100x Mega TNT blocks, Blast Igniter item, tiered gunpowder crafting recipes, and non-blocking Rust time-sliced detonation.",
+      "path": "./mods/mega_tnt",
+      "manifest": "./mods/mega_tnt/mod.json",
+      "blocks": [
+        "./mods/mega_tnt/blocks/tnt_5x.json",
+        "./mods/mega_tnt/blocks/tnt_10x.json",
+        "./mods/mega_tnt/blocks/tnt_50x.json",
+        "./mods/mega_tnt/blocks/tnt_100x.json"
+      ],
+      "items": [
+        "./mods/mega_tnt/items/blast_igniter.json"
+      ],
+      "recipes": [
+        "./mods/mega_tnt/recipes/tnt_recipes.json"
+      ],
+      "script": "./mods/mega_tnt/script.js"
+    }
+  ]
+}

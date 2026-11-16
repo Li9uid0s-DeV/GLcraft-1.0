@@ -1,0 +1,22 @@
+{
+  "id": "megatnt",
+  "name": "Mega TNT Pack",
+  "version": "1.4.0",
+  "mc_version": "26.3",
+  "description": "High-yield tiered explosives powered by Rust time-sliced raycast destruction (max 4,096 blocks/frame budget for Kompanio 500 4GB RAM).",
+  "entrypoints": {
+    "blocks": [
+      "blocks/tnt_5x.json",
+      "blocks/tnt_10x.json",
+      "blocks/tnt_50x.json",
+      "blocks/tnt_100x.json"
+    ],
+    "items": [
+      "items/blast_igniter.json"
+    ],
+    "recipes": [
+      "recipes/tnt_recipes.json"
+    ],
+    "script": "script.js"
+  }
+}

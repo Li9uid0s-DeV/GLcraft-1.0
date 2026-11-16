@@ -1,0 +1,16 @@
+{
+  "id": "megatnt:blast_igniter",
+  "numeric_id": 260,
+  "name": "Blast Igniter (Remote & Contact Detonator)",
+  "mod_id": "megatnt",
+  "category": "tools",
+  "max_stack_size": 1,
+  "durability": 256,
+  "icon_color": "#ff3d00",
+  "secondary_color": "#ffd600",
+  "behavior": {
+    "right_click_block": "ignite_tnt_or_fire",
+    "shift_right_click_air": "detonate_all_primed_tnt",
+    "range": 48
+  }
+}

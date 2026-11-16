@@ -1,0 +1,27 @@
+{
+  "id": "megatnt:tnt_5x",
+  "numeric_id": 60,
+  "name": "TNT x5 (Compact Buster)",
+  "mod_id": "megatnt",
+  "category": "explosives",
+  "hardness": 0.0,
+  "blast_resistance": 0.0,
+  "opaque": true,
+  "light_level": 0,
+  "proper_tool": "any",
+  "textures": {
+    "top": "#d9381e",
+    "bottom": "#8c2211",
+    "side": "#ff5722",
+    "stripe": "#ffe082",
+    "label": "5X"
+  },
+  "tnt_properties": {
+    "multiplier": 5,
+    "blast_radius": 9,
+    "fuse_ticks": 60,
+    "spawns_debris": true,
+    "incendiary": false,
+    "slice_budget_per_tick": 4096
+  }
+}

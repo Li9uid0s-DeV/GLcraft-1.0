@@ -1,0 +1,27 @@
+{
+  "id": "megatnt:tnt_10x",
+  "numeric_id": 61,
+  "name": "TNT x10 (Crater Maker)",
+  "mod_id": "megatnt",
+  "category": "explosives",
+  "hardness": 0.0,
+  "blast_resistance": 0.0,
+  "opaque": true,
+  "light_level": 2,
+  "proper_tool": "any",
+  "textures": {
+    "top": "#ff9800",
+    "bottom": "#7c4dff",
+    "side": "#fb8c00",
+    "stripe": "#fff59d",
+    "label": "10X"
+  },
+  "tnt_properties": {
+    "multiplier": 10,
+    "blast_radius": 14,
+    "fuse_ticks": 75,
+    "spawns_debris": true,
+    "incendiary": false,
+    "slice_budget_per_tick": 4096
+  }
+}

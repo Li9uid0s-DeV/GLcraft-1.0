@@ -1,0 +1,6 @@
+{
+  "name": "VoxelCraft 26.3: Wilderness Bound & Rust/WASM Mod Engine",
+  "description": "3D voxel sandbox engine based on Minecraft Java Edition 26.3 with 16-bit palette-compressed chunk architecture, 7 world generators, data-driven Mod system (Mega TNT Pack), Physics Mod, Weather2 Tornadoes, WorldEdit, Axiom, JEI, Jade, and WebRTC/WSS multiplayer.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

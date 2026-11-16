@@ -1,0 +1,27 @@
+{
+  "id": "megatnt:tnt_100x",
+  "numeric_id": 63,
+  "name": "TNT x100 (Supernova Core)",
+  "mod_id": "megatnt",
+  "category": "explosives",
+  "hardness": 0.0,
+  "blast_resistance": 0.0,
+  "opaque": true,
+  "light_level": 9,
+  "proper_tool": "any",
+  "textures": {
+    "top": "#00e5ff",
+    "bottom": "#1a237e",
+    "side": "#00b0ff",
+    "stripe": "#ff1744",
+    "label": "100X"
+  },
+  "tnt_properties": {
+    "multiplier": 100,
+    "blast_radius": 36,
+    "fuse_ticks": 120,
+    "spawns_debris": true,
+    "incendiary": true,
+    "slice_budget_per_tick": 4096
+  }
+}

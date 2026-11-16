@@ -1,0 +1,27 @@
+{
+  "id": "megatnt:tnt_50x",
+  "numeric_id": 62,
+  "name": "TNT x50 (Tectonic Charge)",
+  "mod_id": "megatnt",
+  "category": "explosives",
+  "hardness": 0.0,
+  "blast_resistance": 0.0,
+  "opaque": true,
+  "light_level": 5,
+  "proper_tool": "any",
+  "textures": {
+    "top": "#7c4dff",
+    "bottom": "#311b92",
+    "side": "#651fff",
+    "stripe": "#00e5ff",
+    "label": "50X"
+  },
+  "tnt_properties": {
+    "multiplier": 50,
+    "blast_radius": 24,
+    "fuse_ticks": 95,
+    "spawns_debris": true,
+    "incendiary": true,
+    "slice_budget_per_tick": 4096
+  }
+}

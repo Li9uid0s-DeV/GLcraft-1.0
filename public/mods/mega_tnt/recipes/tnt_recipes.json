@@ -1,0 +1,93 @@
+{
+  "recipes": [
+    {
+      "id": "megatnt:craft_tnt_5x",
+      "type": "shaped",
+      "pattern": [
+        "TGT",
+        "GTG",
+        "TGT"
+      ],
+      "key": {
+        "T": "minecraft:tnt",
+        "G": "minecraft:gunpowder"
+      },
+      "result": {
+        "id": "megatnt:tnt_5x",
+        "count": 1
+      }
+    },
+    {
+      "id": "megatnt:craft_tnt_10x",
+      "type": "shaped",
+      "pattern": [
+        "R5R",
+        "5D5",
+        "R5R"
+      ],
+      "key": {
+        "5": "megatnt:tnt_5x",
+        "R": "minecraft:redstone_block",
+        "D": "minecraft:diamond"
+      },
+      "result": {
+        "id": "megatnt:tnt_10x",
+        "count": 1
+      }
+    },
+    {
+      "id": "megatnt:craft_tnt_50x",
+      "type": "shaped",
+      "pattern": [
+        "XOX",
+        "OEO",
+        "XOX"
+      ],
+      "key": {
+        "X": "megatnt:tnt_10x",
+        "O": "minecraft:obsidian",
+        "E": "minecraft:emerald_block"
+      },
+      "result": {
+        "id": "megatnt:tnt_50x",
+        "count": 1
+      }
+    },
+    {
+      "id": "megatnt:craft_tnt_100x",
+      "type": "shaped",
+      "pattern": [
+        "FIF",
+        "INI",
+        "FIF"
+      ],
+      "key": {
+        "F": "megatnt:tnt_50x",
+        "I": "minecraft:iron_block",
+        "N": "minecraft:nether_star"
+      },
+      "result": {
+        "id": "megatnt:tnt_100x",
+        "count": 1
+      }
+    },
+    {
+      "id": "megatnt:craft_blast_igniter",
+      "type": "shaped",
+      "pattern": [
+        "  R",
+        " IF",
+        "I  "
+      ],
+      "key": {
+        "R": "minecraft:redstone_torch",
+        "I": "minecraft:iron_ingot",
+        "F": "minecraft:flint_and_steel"
+      },
+      "result": {
+        "id": "megatnt:blast_igniter",
+        "count": 1
+      }
+    }
+  ]
+}
