@@ -72,7 +72,20 @@ export class SoundPhysicsAndVoiceEngine {
   }
 
   playSoundEffect(
-    type: 'dig' | 'place' | 'step' | 'jump' | 'explode' | 'tnt_fuse' | 'lucky' | 'thunder',
+    type:
+      | 'dig'
+      | 'place'
+      | 'step'
+      | 'jump'
+      | 'explode'
+      | 'tnt_fuse'
+      | 'lucky'
+      | 'thunder'
+      | 'hurt'
+      | 'mob_death'
+      | 'creeper_hisss'
+      | 'bow_shoot'
+      | 'zombie_burn',
     pitchJitter = 1.0
   ): void {
     const ctx = this.ensureContext();
@@ -110,16 +123,54 @@ export class SoundPhysicsAndVoiceEngine {
         osc.stop(now + 0.08);
         break;
       }
-      case 'tnt_fuse': {
+      case 'hurt':
+      case 'mob_death': {
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(520, now);
-        osc.frequency.linearRampToValueAtTime(880, now + 0.35);
-        gain.gain.setValueAtTime(0.18 * this.masterVolume, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+        osc.frequency.setValueAtTime((type === 'mob_death' ? 165 : 220) * pitch, now);
+        osc.frequency.exponentialRampToValueAtTime(type === 'mob_death' ? 48 : 85, now + 0.16);
+        gain.gain.setValueAtTime(0.26 * this.masterVolume, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
         osc.connect(gain);
         gain.connect(this.lowpassFilter);
         osc.start(now);
-        osc.stop(now + 0.37);
+        osc.stop(now + 0.19);
+        break;
+      }
+      case 'bow_shoot': {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(480 * pitch, now);
+        osc.frequency.exponentialRampToValueAtTime(170, now + 0.11);
+        gain.gain.setValueAtTime(0.22 * this.masterVolume, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.connect(gain);
+        gain.connect(this.lowpassFilter);
+        osc.start(now);
+        osc.stop(now + 0.13);
+        break;
+      }
+      case 'zombie_burn': {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(640 * pitch, now);
+        osc.frequency.exponentialRampToValueAtTime(290, now + 0.09);
+        gain.gain.setValueAtTime(0.14 * this.masterVolume, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.connect(gain);
+        gain.connect(this.lowpassFilter);
+        osc.start(now);
+        osc.stop(now + 0.11);
+        break;
+      }
+      case 'creeper_hisss':
+      case 'tnt_fuse': {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.linearRampToValueAtTime(920, now + 0.38);
+        gain.gain.setValueAtTime(0.18 * this.masterVolume, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        osc.connect(gain);
+        gain.connect(this.lowpassFilter);
+        osc.start(now);
+        osc.stop(now + 0.41);
         break;
       }
       case 'lucky': {
@@ -155,6 +206,18 @@ export class SoundPhysicsAndVoiceEngine {
         osc.stop(now + 0.62);
         break;
       }
+    }
+  }
+
+  /**
+   * §6 Phase 1: Plays thunder rumble with acoustic speed-of-sound delay proportional to strike distance.
+   */
+  playDistanceDelayedThunder(distanceBlocks: number): void {
+    const delayMs = Math.min(2400, Math.max(0, Math.round((distanceBlocks / 340) * 1000)));
+    if (delayMs <= 20) {
+      this.playSoundEffect('thunder');
+    } else if (typeof window !== 'undefined') {
+      window.setTimeout(() => this.playSoundEffect('thunder'), delayMs);
     }
   }
 

@@ -22,6 +22,8 @@ export interface EngineSettings {
   cameraOverhaul: boolean;
   enhancedVisuals: boolean;
   weather2Tornado: boolean;
+  tornadoBlockDestruction: boolean;
+  distantHorizonsLod: boolean;
   soundPhysics: boolean;
   masterVolume: number;
   voiceChatPttKey: string;
@@ -673,8 +675,18 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                 },
                 {
                   key: 'weather2Tornado' as const,
-                  title: 'Weather2 Remastered (Storm Cells & Tornado)',
-                  desc: 'Localized moving storm clouds, wind deflection, and block-lifting F4 Tornadoes.',
+                  title: "ProtoManly's Weather (PMWeather Supercells & Tornado)",
+                  desc: 'Stage 1→2→3 Storm Cell lifecycle, rotating wall cloud, WSR-88D Radar, and EF0–EF5 Tornadoes.',
+                },
+                {
+                  key: 'tornadoBlockDestruction' as const,
+                  title: 'PMWeather Tornado Block Destruction (竜巻ブロック破壊)',
+                  desc: 'Lifts terrain blocks as 3D debris when wind strength exceeds block hardness (EF0–EF5).',
+                },
+                {
+                  key: 'distantHorizonsLod' as const,
+                  title: 'Distant Horizons 3.3.4 (3-Tier LOD Terrain)',
+                  desc: 'Extends visible horizon 3–4x using Near (1x1), Mid (2x2), and Far (4x4 column pillar) LODs.',
                 },
                 {
                   key: 'cameraOverhaul' as const,

@@ -12,6 +12,10 @@ import {
   Weather2Simulation,
   WeatherDisasterType,
   WEATHER2_DISASTERS,
+  canTornadoLiftBlock,
+  formatTornadoHudLabel,
+  generateJaggedLightningBolt,
+  type PmStormCell,
 } from './engine/weather2System';
 import { generateVoxelMaterialTextures } from './engine/textures';
 import { SoundPhysicsAndVoiceEngine } from './engine/audioVoice';
@@ -37,6 +41,20 @@ import {
   type SodiumOptimizationSettings,
   type TaczAttachmentLoadout,
 } from './engine/taczGunEngine';
+import {
+  createPlayerCharacterRig,
+  createInitialPlayerAnimState,
+  stepPlayerProceduralAnimation,
+  triggerPlayerSwing,
+  triggerPlayerHurt,
+  applyAnimStateToPlayerRig,
+  HostileMobManager,
+  type MobArchetype,
+} from './engine/characterAndMobEngine';
+import {
+  buildDistantHorizonsLodMesh,
+  DEFAULT_DISTANT_HORIZONS_CONFIG,
+} from './engine/voxelAtlasAndLighting';
 
 interface DebrisParticle {
   active: boolean;
@@ -65,23 +83,6 @@ interface PrimedTntEntity {
   radius: number;
   fuseRemaining: number;
   maxFuse: number;
-}
-
-interface MobEntity {
-  id: number;
-  name: string;
-  archetype: 'forager' | 'chaser' | 'kiter';
-  group: THREE.Group;
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vz: number;
-  yaw: number;
-  hp: number;
-  maxHp: number;
-  walkPhase: number;
-  koTimer: number;
 }
 
 const MAX_DEBRIS = 240;
@@ -124,6 +125,8 @@ export default function App() {
     cameraOverhaul: true,
     enhancedVisuals: true,
     weather2Tornado: false, // Always start worlds in Clear (Sunny) weather!
+    tornadoBlockDestruction: true,
+    distantHorizonsLod: true,
     soundPhysics: true,
     masterVolume: 0.8,
     voiceChatPttKey: 'V',
@@ -176,6 +179,12 @@ export default function App() {
     cloudDensityPct: 34,
   });
   const [tornadoDistHud, setTornadoDistHud] = useState<number | null>(null);
+  const [tornadoEfLabelHud, setTornadoEfLabelHud] = useState<string | null>(null);
+  const [pmStormCellsHud, setPmStormCellsHud] = useState<PmStormCell[]>([]);
+  const [dhLodChunkCountHud, setDhLodChunkCountHud] = useState(0);
+  const [thirdPersonView, setThirdPersonView] = useState(false);
+  const [isDaytime, setIsDaytime] = useState(true);
+  const [activeMobCountHud, setActiveMobCountHud] = useState(4);
   const [axiomMode, setAxiomMode] = useState(false);
   const [axiomSymmetry, setAxiomSymmetry] = useState<'off' | 'x' | 'z'>('off');
   const [worldEditPos1, setWorldEditPos1] = useState<[number, number, number] | null>(null);
@@ -186,7 +195,7 @@ export default function App() {
   const [blastFlashHud, setBlastFlashHud] = useState(0);
   const [lastToast, setLastToast] = useState<string | null>(null);
   const [commandLog, setCommandLog] = useState<string[]>([
-    '[VoxelCraft 26.3] Ready. Sodium + Lithium + ModernFix + ImmediatelyFast + Indium + TaCZ + Do a Barrel Roll active. Press [O] for Sodium or [K] for Mods/Shaders.',
+    '[VoxelCraft 26.3] Ready. Distant Horizons 3.3.4 LOD + PMWeather + TaCZ 11-Gun Pack + 4 Hostile Mobs active.',
   ]);
   const [shaderPacks, setShaderPacks] = useState<JavaShaderPackProfile[]>(BUILTIN_JAVA_SHADER_PACKS);
   const [activeShaderPack, setActiveShaderPack] = useState<JavaShaderPackProfile>(
@@ -207,6 +216,7 @@ export default function App() {
   const weather2Ref = useRef<Weather2Simulation>(new Weather2Simulation());
   const audioRef = useRef<SoundPhysicsAndVoiceEngine>(new SoundPhysicsAndVoiceEngine());
   const netRef = useRef<ServerlessMultiplayerClient>(new ServerlessMultiplayerClient());
+  const mobManagerRef = useRef<HostileMobManager>(new HostileMobManager(24));
 
   const gameStateRef = useRef(gameState);
   const activeModalRef = useRef(activeModal);
@@ -223,6 +233,16 @@ export default function App() {
   const wePos2Ref = useRef<[number, number, number] | null>(null);
   const weatherStateRef = useRef<WeatherDisasterType>('clear');
   const activeShaderPackRef = useRef<JavaShaderPackProfile>(activeShaderPack);
+  const thirdPersonViewRef = useRef(thirdPersonView);
+  const isDaytimeRef = useRef(isDaytime);
+
+  useEffect(() => {
+    thirdPersonViewRef.current = thirdPersonView;
+  }, [thirdPersonView]);
+
+  useEffect(() => {
+    isDaytimeRef.current = isDaytime;
+  }, [isDaytime]);
 
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -323,6 +343,8 @@ export default function App() {
 
   // Scene & Mesh synchronization callbacks stored in refs
   const rebuildChunkThreeMeshRef = useRef<(cx: number, cz: number, isInitialSpawn?: boolean) => void>(() => {});
+  const rebuildDistantHorizonsLodRef = useRef<() => void>(() => {});
+  const spawnHostileMobWaveRef = useRef<() => void>(() => {});
   const clearAllThreeChunksRef = useRef<() => void>(() => {});
   const replayChunkFadeInRef = useRef<() => void>(() => {});
   const fireTaczWeaponRef = useRef<() => void>(() => {});
@@ -344,6 +366,12 @@ export default function App() {
     activeShaderPackRef.current = activeShaderPack;
     updateMaterialSettingsRef.current();
   }, [activeShaderPack, settings.renderMode, settings.textureResolution, settings.fov]);
+
+  useEffect(() => {
+    if (gameStateRef.current !== 'title') {
+      rebuildDistantHorizonsLodRef.current();
+    }
+  }, [settings.distantHorizonsLod]);
 
   // Start or regenerate world around spawn (ALWAYS in Clear / Sunny weather!)
   const startWorldSession = useCallback(
@@ -384,23 +412,28 @@ export default function App() {
           rebuildChunkThreeMeshRef.current(cx, cz, true);
         }
       }
+      rebuildDistantHorizonsLodRef.current();
 
       const spawnX = 0.5;
-      const spawnZ = targetType === 'oneblock' ? 0.5 : 4.5;
+      const spawnZ = targetType === 'oneblock' ? 0.5 : 1.5;
       const surfY =
         targetType === 'oneblock'
           ? 65
           : targetType === 'skyblock' || targetType === 'skyblock_lucky'
           ? 65
-          : eng.computeSurfaceY(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
+          : Math.max(
+              eng.computeSurfaceY(Math.floor(spawnX), Math.floor(spawnZ)),
+              eng.computeSurfaceY(Math.floor(spawnX), Math.floor(spawnZ) - 1)
+            ) + 1;
 
       teleportPlayerRef.current(spawnX, surfY + 1.65, spawnZ);
+      spawnHostileMobWaveRef.current();
       setLoadedChunkCount(eng.chunks.size);
       setActiveModal('none');
       setGameState('playing');
       document.body.dataset.state = 'playing';
       showToast(
-        `World "${worldName}" started (Weather: Clear 晴天) · Sodium Smooth Chunk Fade-In Active · ${eng.chunks.size} chunks meshed`
+        `World "${worldName}" started (Weather: Clear 晴天) · Distant Horizons 3.3.4 LOD + 4 Hostile Mobs Active · ${eng.chunks.size} chunks meshed`
       );
     },
     [worldType, dimension, worldSeed, worldName, showToast]
@@ -928,11 +961,16 @@ export default function App() {
       opaqueMaterial.needsUpdate = true;
     };
 
-    // Chunk Mesh Containers
+    // Chunk Mesh Containers + Distant Horizons 3.3.4 LOD Mesh Container
     const chunkMeshGroup = new THREE.Group();
     scene.add(chunkMeshGroup);
     const opaqueMeshes = new Map<string, THREE.Mesh>();
     const waterMeshes = new Map<string, THREE.Mesh>();
+    const dhLodMeshes = new Map<string, THREE.Mesh>();
+    const dhLodMaterial = new THREE.MeshLambertMaterial({
+      vertexColors: true,
+      side: THREE.DoubleSide,
+    });
 
     clearAllThreeChunksRef.current = () => {
       opaqueMeshes.forEach((m) => {
@@ -943,8 +981,70 @@ export default function App() {
         m.geometry.dispose();
         chunkMeshGroup.remove(m);
       });
+      dhLodMeshes.forEach((m) => {
+        m.geometry.dispose();
+        chunkMeshGroup.remove(m);
+      });
       opaqueMeshes.clear();
       waterMeshes.clear();
+      dhLodMeshes.clear();
+      setDhLodChunkCountHud(0);
+    };
+
+    rebuildDistantHorizonsLodRef.current = () => {
+      dhLodMeshes.forEach((m) => {
+        m.geometry.dispose();
+        chunkMeshGroup.remove(m);
+      });
+      dhLodMeshes.clear();
+
+      const eng = engineRef.current;
+      if (
+        !settingsRef.current.distantHorizonsLod ||
+        eng.worldType === 'skyblock' ||
+        eng.worldType === 'skyblock_lucky' ||
+        eng.worldType === 'oneblock'
+      ) {
+        setDhLodChunkCountHud(0);
+        return;
+      }
+
+      const nearRad = Math.min(2, Math.max(2, settingsRef.current.renderDistance));
+      const farRad = nearRad + 4; // 3x-4x visible horizon ring (Mid 2x2 + Far 4x4 pillars)
+      const fogRgb: [number, number, number] = [0.56, 0.79, 0.98];
+      let lodCount = 0;
+
+      for (let cx = -farRad; cx <= farRad; cx++) {
+        for (let cz = -farRad; cz <= farRad; cz++) {
+          const maxAxis = Math.max(Math.abs(cx), Math.abs(cz));
+          if (maxAxis <= nearRad) continue; // Near ring uses full-detail chunk mesh
+          const stepSize: 2 | 4 = maxAxis <= nearRad + 2 ? 2 : 4;
+          const fogBlend = Math.min(0.76, ((maxAxis - nearRad) / (farRad - nearRad + 1)) * 0.68);
+          const lodBuf = buildDistantHorizonsLodMesh(
+            cx,
+            cz,
+            stepSize,
+            (wx, wz) => eng.computeSurfaceY(wx, wz),
+            (wx, wz) => eng.sampleBiome(wx, wz),
+            (wx, wz) => eng.blendedGrassColor(wx, wz),
+            fogRgb,
+            fogBlend,
+            DEFAULT_DISTANT_HORIZONS_CONFIG
+          );
+          if (lodBuf.positions.length > 0) {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(lodBuf.positions, 3));
+            geo.setAttribute('normal', new THREE.BufferAttribute(lodBuf.normals, 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(lodBuf.colors, 3));
+            geo.computeBoundingSphere();
+            const lodMesh = new THREE.Mesh(geo, dhLodMaterial);
+            chunkMeshGroup.add(lodMesh);
+            dhLodMeshes.set(`${cx},${cz}`, lodMesh);
+            lodCount++;
+          }
+        }
+      }
+      setDhLodChunkCountHud(lodCount);
     };
 
     rebuildChunkThreeMeshRef.current = (cx: number, cz: number) => {
@@ -1358,74 +1458,34 @@ export default function App() {
       audioRef.current.playSoundEffect('tnt_fuse');
     };
 
-    // Composite 7-Part Procedural Mobs (3 Distinct Archetypes: Forager, Chaser, Kiter)
-    const mobs: MobEntity[] = [];
-    const createCompositeMob = (
-      name: string,
-      archetype: MobEntity['archetype'],
-      x: number,
-      z: number,
-      bodyHex: number,
-      accentHex: number
-    ) => {
-      const group = new THREE.Group();
-      const matBody = new THREE.MeshStandardMaterial({ color: bodyHex, roughness: 0.75 });
-      const matAccent = new THREE.MeshStandardMaterial({ color: accentHex, roughness: 0.45 });
+    // §2 & §3: Player 3D Character Rig (Head 8x8x8, Body 8x12x4, Arms 4x12x4, Legs 4x12x4) + 1st-Person Viewmodel Arm
+    const playerRig = createPlayerCharacterRig();
+    const playerAnimState = createInitialPlayerAnimState();
+    scene.add(playerRig.root);
 
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.75, 0.45), matBody);
-      torso.position.y = 0.75;
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), matAccent);
-      head.position.set(0, 1.38, 0.08);
-      const visor = new THREE.Mesh(
-        new THREE.BoxGeometry(0.38, 0.12, 0.1),
-        new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 })
-      );
-      visor.position.set(0, 1.4, 0.34);
+    scene.add(camera);
+    const fpArmGroup = new THREE.Group();
+    const fpSleeveMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.56, 0.22),
+      playerRig.material
+    );
+    fpSleeveMesh.position.set(0, -0.22, 0);
+    const fpHeldMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.24, 0.36),
+      new THREE.MeshLambertMaterial({ color: 0xfad11f })
+    );
+    fpHeldMesh.position.set(0, -0.44, -0.18);
+    fpArmGroup.add(fpSleeveMesh, fpHeldMesh);
+    fpArmGroup.position.set(0.46, -0.34, -0.62);
+    fpArmGroup.rotation.set(0.35, -0.25, -0.15);
+    camera.add(fpArmGroup);
 
-      const legL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.5, 0.22), matAccent);
-      legL.position.set(-0.16, 0.25, 0);
-      const legR = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.5, 0.22), matAccent);
-      legR.position.set(0.16, 0.25, 0);
-
-      // Soft radial contact shadow disc grounded at y=0.02
-      const shadowDisc = new THREE.Mesh(
-        new THREE.CircleGeometry(0.48, 12),
-        new THREE.MeshBasicMaterial({
-          color: 0x000000,
-          transparent: true,
-          opacity: 0.38,
-          depthWrite: false,
-        })
-      );
-      shadowDisc.rotation.x = -Math.PI / 2;
-      shadowDisc.position.y = 0.02;
-
-      group.add(torso, head, visor, legL, legR, shadowDisc);
-      const y = engineRef.current.computeSurfaceY(Math.round(x), Math.round(z)) + 1;
-      group.position.set(x, y, z);
-      scene.add(group);
-
-      mobs.push({
-        id: nextEntityId++,
-        name,
-        archetype,
-        group,
-        x,
-        y,
-        z,
-        vx: 0,
-        vz: 0,
-        yaw: 0,
-        hp: 20,
-        maxHp: 20,
-        walkPhase: Math.random() * 6,
-        koTimer: 0,
-      });
-    };
-
-    createCompositeMob('Wilderness Boar (Forager)', 'forager', -5.5, -4.5, 0x8f563b, 0xd9a066);
-    createCompositeMob('Dappled Husk (Chaser)', 'chaser', 6.5, -8.5, 0x3b7a57, 0x94b85c);
-    createCompositeMob('Poplar Ranger (Kiter)', 'kiter', -7.5, -10.5, 0x5c6bc0, 0xffca28);
+    // §4 & §5: Hostile Mob Manager (Zombie, Skeleton, Spider, Camo Creeper) & Pooled Parabolic Arrow InstancedMesh
+    const arrowGeo = new THREE.BoxGeometry(0.08, 0.08, 0.52);
+    const arrowMat = new THREE.MeshStandardMaterial({ color: 0xd7ccc8, emissive: 0x3e2723 });
+    const arrowInstanced = new THREE.InstancedMesh(arrowGeo, arrowMat, 24);
+    arrowInstanced.frustumCulled = false;
+    scene.add(arrowInstanced);
 
     // Player Kinematics & Camera Overhaul State
     const player = {
@@ -1443,6 +1503,26 @@ export default function App() {
       trauma: 0,
       miningProgress: 0,
       miningBlockKey: '',
+    };
+
+    spawnHostileMobWaveRef.current = () => {
+      // Remove old mob meshes if resetting or spawning wave
+      const mgr = mobManagerRef.current;
+      // Clear any dead or far mobs first
+      const archetypes: Array<{ type: MobArchetype; dx: number; dz: number }> = [
+        { type: 'zombie', dx: -4.5, dz: -6.5 },
+        { type: 'skeleton', dx: 5.5, dz: -8.5 },
+        { type: 'spider', dx: -6.5, dz: -9.5 },
+        { type: 'creeper', dx: 3.5, dz: -7.0 },
+      ];
+      for (const spec of archetypes) {
+        const mx = player.x + spec.dx + (Math.random() - 0.5) * 1.5;
+        const mz = player.z + spec.dz + (Math.random() - 0.5) * 1.5;
+        const my = engineRef.current.computeSurfaceY(Math.floor(mx), Math.floor(mz)) + 1;
+        mgr.spawnMob(spec.type, mx, my, mz);
+      }
+      mgr.syncMobMeshesToScene(scene);
+      setActiveMobCountHud(mgr.mobs.length);
     };
 
     teleportPlayerRef.current = (x, y, z) => {
@@ -1495,7 +1575,7 @@ export default function App() {
     let lastPointerY = 0;
 
     // 3D Voxel DDA Raycast Helper (finds exact target voxel & adjacent placement voxel within 7m)
-    const raycastVoxel = (): {
+    const raycastVoxel = (maxDist = 7.0): {
       hit: boolean;
       bx: number;
       by: number;
@@ -1513,7 +1593,7 @@ export default function App() {
       let prevY = Math.floor(player.y);
       let prevZ = Math.floor(player.z);
 
-      for (let d = 0.2; d <= 7.0; d += step) {
+      for (let d = 0.2; d <= maxDist; d += step) {
         const rx = player.x + dir.x * d;
         const ry = player.y + dir.y * d;
         const rz = player.z + dir.z * d;
@@ -1544,13 +1624,103 @@ export default function App() {
       return null;
     };
 
+    // Raycast against active Hostile Mobs (§4 & §5)
+    const raycastHostileMob = (maxRange: number) => {
+      const dir = new THREE.Vector3(0, 0, -1).applyEuler(
+        new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ')
+      );
+      let closestMob: (typeof mobManagerRef.current.mobs)[number] | null = null;
+      let closestDist = maxRange;
+
+      for (const m of mobManagerRef.current.mobs) {
+        if (m.state === 'dead') continue;
+        const mobCenterY = m.y + (m.archetype === 'spider' ? 0.45 : 0.95);
+        const toMobX = m.x - player.x;
+        const toMobY = mobCenterY - player.y;
+        const toMobZ = m.z - player.z;
+        const proj = toMobX * dir.x + toMobY * dir.y + toMobZ * dir.z;
+        if (proj < 0.2 || proj > closestDist) continue;
+        const perpX = toMobX - dir.x * proj;
+        const perpY = toMobY - dir.y * proj;
+        const perpZ = toMobZ - dir.z * proj;
+        const hitRadius = m.archetype === 'spider' ? 0.85 : 0.72;
+        if (Math.hypot(perpX, perpY, perpZ) <= hitRadius) {
+          closestDist = proj;
+          closestMob = m;
+        }
+      }
+      return closestMob;
+    };
+
     const handleBlockInteraction = (button: 'left' | 'right') => {
       if (gameStateRef.current !== 'playing' || activeModalRef.current !== 'none') return;
-      const hit = raycastVoxel();
-      if (!hit) return;
 
       const equippedId = hotbarRef.current[selectedSlotRef.current];
       const equippedDef = engineRef.current.blocksByNum.get(equippedId);
+      const equippedGun = getTaczGunByNumericId(equippedId);
+
+      if (button === 'left') {
+        // Always trigger dominant-arm ~0.3s eased attack/dig swing (restarts from t=0 on rapid clicks, §3.1.6)
+        triggerPlayerSwing(playerAnimState);
+
+        // TaCZ Firearm Ballistics & Hit Detection
+        if (equippedGun) {
+          audioRef.current.playSoundEffect(equippedGun.itemId === 'tacz:rpg7' ? 'explode' : 'bow_shoot');
+          player.cameraPitchKick = Math.min(0.18, equippedGun.recoilPitch * 1.4);
+          setTaczAmmoHud((a) => (a > 0 ? a - 1 : equippedGun.magCapacity));
+
+          if (equippedGun.explosiveRadius > 0) {
+            const targetBlock = raycastVoxel(45.0);
+            if (targetBlock) {
+              triggerExplosionRef.current(
+                targetBlock.bx,
+                targetBlock.by,
+                targetBlock.bz,
+                equippedGun.explosiveRadius
+              );
+              return;
+            }
+          }
+
+          const hitMob = raycastHostileMob(equippedGun.muzzleVelocity * 0.45);
+          if (hitMob) {
+            const res = mobManagerRef.current.damageMob(
+              hitMob.id,
+              equippedGun.damage,
+              player.x,
+              player.z
+            );
+            audioRef.current.playSoundEffect(res.killed ? 'mob_death' : 'hurt');
+            spawnDebrisBurstRef.current(hitMob.x, hitMob.y + 1.0, hitMob.z, [0.9, 0.2, 0.2], 10);
+            showToast(
+              res.killed
+                ? `[TaCZ ${equippedGun.name}] Eliminated ${hitMob.archetype.toUpperCase()}!`
+                : `[TaCZ ${equippedGun.name}] Hit ${hitMob.archetype.toUpperCase()} (-${equippedGun.damage} HP · ${hitMob.hp}/${hitMob.maxHp})`
+            );
+            return;
+          }
+        } else {
+          // Melee attack check within 4.2 blocks (§4 & §5)
+          const hitMob = raycastHostileMob(4.2);
+          if (hitMob) {
+            const res = mobManagerRef.current.damageMob(hitMob.id, 6, player.x, player.z);
+            audioRef.current.playSoundEffect(res.killed ? 'mob_death' : 'hurt');
+            spawnDebrisBurstRef.current(hitMob.x, hitMob.y + 1.0, hitMob.z, [0.9, 0.25, 0.2], 8);
+            showToast(
+              res.killed
+                ? `Defeated ${hitMob.archetype.toUpperCase()}!`
+                : `Struck ${hitMob.archetype.toUpperCase()} (${hitMob.hp}/${hitMob.maxHp} HP)`
+            );
+            return;
+          }
+        }
+      } else if (button === 'right' && equippedGun) {
+        setTaczAdsHud((ads) => !ads);
+        return;
+      }
+
+      const hit = raycastVoxel();
+      if (!hit) return;
 
       // WorldEdit Wooden Axe Wand (`261`) Pos1 / Pos2 selection
       if (equippedId === 261) {
@@ -1646,6 +1816,7 @@ export default function App() {
         }
 
         if (!equippedDef || equippedDef.isItemOnly || equippedDef.numericId === 0) return;
+        triggerPlayerSwing(playerAnimState);
 
         const px = hit.bx + hit.nx;
         const py = hit.by + hit.ny;
@@ -1729,7 +1900,50 @@ export default function App() {
 
       if (code === 'KeyK') {
         e.preventDefault();
+        setShadersModsInitialTab('mods');
         setActiveModal((m) => (m === 'shaders_mods' ? 'none' : 'shaders_mods'));
+        return;
+      }
+
+      if (code === 'KeyO') {
+        e.preventDefault();
+        setShadersModsInitialTab('sodium');
+        setActiveModal((m) => (m === 'shaders_mods' ? 'none' : 'shaders_mods'));
+        return;
+      }
+
+      if (code === 'F5' || code === 'KeyC') {
+        e.preventDefault();
+        setThirdPersonView((v) => {
+          const next = !v;
+          showToast(
+            next
+              ? 'Camera: 3rd-Person Character Rig View [F5]'
+              : 'Camera: 1st-Person View [F5]'
+          );
+          return next;
+        });
+        return;
+      }
+
+      if (code === 'KeyN') {
+        e.preventDefault();
+        setIsDaytime((d) => {
+          const next = !d;
+          showToast(
+            next
+              ? 'Time: Daytime ☀ (Zombies & Skeletons burn in direct sunlight!)'
+              : 'Time: Nighttime 🌙 (Hostile Mobs hunt without sunlight burn)'
+          );
+          return next;
+        });
+        return;
+      }
+
+      if (code === 'KeyM') {
+        e.preventDefault();
+        spawnHostileMobWaveRef.current();
+        showToast('Spawned 4 Hostile Mob Archetypes (Zombie, Skeleton, Spider, Creeper)!');
         return;
       }
 
@@ -1741,6 +1955,16 @@ export default function App() {
 
       if (code === 'KeyR') {
         e.preventDefault();
+        const eqGun = getTaczGunByNumericId(hotbarRef.current[selectedSlotRef.current]);
+        if (eqGun) {
+          setTaczReloadingHud(true);
+          audioRef.current.playSoundEffect('place');
+          setTimeout(() => {
+            setTaczAmmoHud(eqGun.magCapacity);
+            setTaczReloadingHud(false);
+          }, eqGun.reloadSeconds * 1000);
+          return;
+        }
         setAxiomMode((a) => !a);
         return;
       }
@@ -1823,6 +2047,7 @@ export default function App() {
     let frameId = 0;
     let lastTime = performance.now();
     let hudSyncAccumulator = 0;
+    let tornadoLiftTimer = 0;
 
     function afterDraw(cb: () => void) {
       const gl = renderer.getContext() as WebGL2RenderingContext;
@@ -1855,6 +2080,8 @@ export default function App() {
         titleStageGroup.visible = true;
         chunkMeshGroup.visible = false;
         tornadoGroup.visible = false;
+        playerRig.root.visible = false;
+        fpArmGroup.visible = false;
         titleStageGroup.rotation.y = elapsed * 0.35;
         camera.position.set(Math.sin(elapsed * 0.25) * 7.5, 4.2, Math.cos(elapsed * 0.25) * 7.5);
         camera.lookAt(0, 1.4, 0);
@@ -1862,14 +2089,19 @@ export default function App() {
         titleStageGroup.visible = false;
         chunkMeshGroup.visible = true;
 
+        const isSprinting =
+          (keysPressed.has('ControlLeft') || keysPressed.has('ShiftLeft')) &&
+          (keysPressed.has('KeyW') || keysPressed.has('ArrowUp'));
+
         if (gameStateRef.current === 'playing' && activeModalRef.current === 'none') {
           // Player Movement & Physics
-          const speed =
+          const baseSpeed =
             gameModeRef.current === 'spectator'
               ? 14
               : axiomModeRef.current
               ? 11
               : 6.4;
+          const speed = isSprinting ? baseSpeed * 1.32 : baseSpeed;
           let moveForward = 0;
           let moveRight = 0;
           if (keysPressed.has('KeyW') || keysPressed.has('ArrowUp')) moveForward += 1;
@@ -1939,12 +2171,81 @@ export default function App() {
           player.trauma = Math.max(0, player.trauma - dt * 1.4);
 
           const shakeAmt = player.trauma * player.trauma * 0.08;
-          camera.position.set(player.x, player.y, player.z);
-          camera.rotation.order = 'YXZ';
-          camera.rotation.y = player.yaw + (Math.random() - 0.5) * shakeAmt;
-          camera.rotation.x =
-            player.pitch - player.cameraPitchKick + (Math.random() - 0.5) * shakeAmt;
-          camera.rotation.z = player.cameraRoll;
+          if (thirdPersonViewRef.current) {
+            // §2.1: 3rd-person view offset behind and slightly above player rig
+            const camDist = 3.8;
+            const camX = player.x + Math.sin(player.yaw) * Math.cos(player.pitch) * camDist;
+            const camY = player.y + 0.65 - Math.sin(player.pitch) * camDist * 0.65;
+            const camZ = player.z + Math.cos(player.yaw) * Math.cos(player.pitch) * camDist;
+            camera.position.set(camX, camY, camZ);
+            camera.lookAt(player.x, player.y - 0.35, player.z);
+          } else {
+            camera.position.set(player.x, player.y, player.z);
+            camera.rotation.order = 'YXZ';
+            camera.rotation.y = player.yaw + (Math.random() - 0.5) * shakeAmt;
+            camera.rotation.x =
+              player.pitch - player.cameraPitchKick + (Math.random() - 0.5) * shakeAmt;
+            camera.rotation.z = player.cameraRoll;
+          }
+        }
+
+        // §3: Step Player Procedural Animation (Walk/Sprint/Idle/Jump/Swim/Attack/Head-Body Lag)
+        const equippedIdNow = hotbarRef.current[selectedSlotRef.current];
+        const equippedDefNow = engineRef.current.blocksByNum.get(equippedIdNow);
+        const isUnderwaterNow =
+          engineRef.current.getBlock(
+            Math.floor(player.x),
+            Math.floor(player.y - 0.8),
+            Math.floor(player.z)
+          ) === 6;
+
+        stepPlayerProceduralAnimation(playerAnimState, {
+          dt,
+          timeSec: elapsed,
+          vx: player.vx,
+          vy: player.vy,
+          vz: player.vz,
+          onGround: player.onGround,
+          isSprinting,
+          isSwimming: isUnderwaterNow,
+          hasHeldItem: Boolean(equippedIdNow),
+          cameraYaw: player.yaw,
+          cameraPitch: player.pitch,
+          isDead: false,
+        });
+
+        const heldHex = equippedDefNow
+          ? `#${new THREE.Color(...equippedDefNow.colorTop).getHexString()}`
+          : '#fad11f';
+
+        applyAnimStateToPlayerRig(
+          playerRig,
+          playerAnimState,
+          player.x,
+          player.y - 1.62,
+          player.z,
+          thirdPersonViewRef.current,
+          heldHex
+        );
+
+        // Update 1st-person right arm viewmodel when in 1st-person view
+        fpArmGroup.visible = !thirdPersonViewRef.current;
+        if (fpArmGroup.visible) {
+          (fpHeldMesh.material as THREE.MeshLambertMaterial).color.set(heldHex);
+          fpArmGroup.rotation.x = 0.35 - playerAnimState.rightArmPitch * 0.55;
+          fpArmGroup.rotation.y = -0.25 + playerAnimState.rightArmYaw * 0.7;
+          fpArmGroup.position.set(
+            0.46,
+            -0.34 + Math.sin(playerAnimState.walkCycle * 2) * 0.02 * playerAnimState.limbSwingAmount,
+            -0.62
+          );
+        }
+
+        // Dynamic sprint FOV boost (§3.1.2)
+        const targetFov = settingsRef.current.fov + playerAnimState.fovBoostDeg;
+        if (Math.abs(camera.fov - targetFov) > 0.15) {
+          camera.fov = targetFov;
+          camera.updateProjectionMatrix();
         }
 
         // Step Time-Sliced Mega TNT Explosion Engine
@@ -2102,7 +2403,6 @@ export default function App() {
             p.ry = Math.random() * 6;
             p.scale = 0.55 + Math.random() * 0.45;
             p.life = 2.2 + Math.random() * 1.6;
-            // Alternate between Dappled Grass green, Golden Poplar leaf gold, and Loam brown
             if (s % 3 === 0) {
               p.r = 0.36;
               p.g = 0.68;
@@ -2130,7 +2430,6 @@ export default function App() {
               dummyScale.set(0, 0, 0);
             } else {
               const localWind = weather2Ref.current.sampleLocalWindField(p.x, p.y, p.z);
-              // Aerodynamic drag & cyclonic updraft from local wind field near disaster center
               p.vx += (localWind.vx * 0.68 - p.vx * 0.48) * dt * 2.6;
               p.vz += (localWind.vz * 0.68 - p.vz * 0.48) * dt * 2.6;
               p.vy += (localWind.vy * 1.35 - 13.5) * dt;
@@ -2167,19 +2466,20 @@ export default function App() {
         debrisInstanced.instanceMatrix.needsUpdate = true;
         if (debrisInstanced.instanceColor) debrisInstanced.instanceColor.needsUpdate = true;
 
-        // Dynamic sky & fog tinting for sandstorm / supercell / hurricane
+        // Dynamic sky & fog tinting for day/night + sandstorm / supercell / hurricane
         if (engineRef.current.dimension === 'minecraft:overworld') {
-          const baseSky = new THREE.Color(0x90caf9);
+          const baseSky = new THREE.Color(isDaytimeRef.current ? 0x90caf9 : 0x0b132b);
           const targetSky = new THREE.Color(w2Meta.fogColorHex);
           baseSky.lerp(targetSky, Math.min(0.92, w2Meta.cloudDarkness + 0.15));
           scene.background = baseSky;
+          sunLight.intensity = isDaytimeRef.current ? 1.35 : 0.22;
           if (scene.fog instanceof THREE.FogExp2) {
             scene.fog.color.copy(baseSky);
             scene.fog.density = w2Meta.fogDensity;
           }
         }
 
-        // Update Weather2 Remastered Tornado / Hurricane Funnel & Wind Suction
+        // §6 Phase 2 & 3: Update ProtoManly's Weather Tornado Funnel, Wind Suction & Block Destruction
         const tornadoActive = w2Meta.vortexRadius > 0;
         tornadoGroup.visible = tornadoActive;
         if (tornadoActive) {
@@ -2188,24 +2488,64 @@ export default function App() {
           const ty = engineRef.current.computeSurfaceY(Math.round(tx), Math.round(tz)) + 1;
           tornadoGroup.position.set(tx, ty, tz);
 
+          const primaryCell = weather2Ref.current.stormCells[0];
+          const descentRatio = primaryCell ? Math.max(0.25, primaryCell.funnelDescent) : 1.0;
+
           const maxFunnelR = w2Meta.vortexRadius;
           const angularRate = 4.2 + vortexSwirl * 2.4;
           for (let i = 0; i < MAX_TORNADO_DEBRIS; i++) {
             const hRatio = i / MAX_TORNADO_DEBRIS;
-            const funnelRadius = 0.8 + Math.pow(hRatio, 1.35) * maxFunnelR;
-            const angle = elapsed * (angularRate - hRatio * 1.8) + i * 0.7;
-            dummyPos.set(
-              Math.cos(angle) * funnelRadius,
-              hRatio * 28,
-              Math.sin(angle) * funnelRadius
-            );
-            dummyRot.set(angle, angle * 0.5, 0);
-            dummyQuat.setFromEuler(dummyRot);
-            dummyScale.setScalar(0.55 + hRatio * (activeDisaster === 'tornado_f5' ? 1.15 : 0.75));
+            // Funnel descends from cloud base (top) down to ground as descentRatio reaches 1.0
+            if (1.0 - hRatio > descentRatio) {
+              dummyPos.set(0, -999, 0);
+              dummyScale.set(0, 0, 0);
+            } else {
+              const funnelRadius = 0.8 + Math.pow(hRatio, 1.35) * maxFunnelR;
+              const angle = elapsed * (angularRate - hRatio * 1.8) + i * 0.7;
+              dummyPos.set(
+                Math.cos(angle) * funnelRadius,
+                hRatio * 28,
+                Math.sin(angle) * funnelRadius
+              );
+              dummyRot.set(angle, angle * 0.5, 0);
+              dummyQuat.setFromEuler(dummyRot);
+              dummyScale.setScalar(0.55 + hRatio * (activeDisaster === 'tornado_f5' ? 1.15 : 0.75));
+            }
             dummyMatrix.compose(dummyPos, dummyQuat, dummyScale);
             tornadoInstanced.setMatrixAt(i, dummyMatrix);
           }
           tornadoInstanced.instanceMatrix.needsUpdate = true;
+
+          // §6 Phase 3: Tornado Block Destruction (`canTornadoLiftBlock`, max 2 blocks per tick)
+          tornadoLiftTimer -= dt;
+          if (tornadoLiftTimer <= 0 && settingsRef.current.tornadoBlockDestruction) {
+            tornadoLiftTimer = 0.22;
+            const windMph = primaryCell?.windSpeedMph ?? (activeDisaster === 'tornado_f5' ? 245 : 102);
+            const dirtyLiftChunks = new Set<string>();
+            for (let bAttempt = 0; bAttempt < 2; bAttempt++) {
+              const bx = Math.round(tx + (Math.random() - 0.5) * maxFunnelR * 1.3);
+              const bz = Math.round(tz + (Math.random() - 0.5) * maxFunnelR * 1.3);
+              const by = engineRef.current.computeSurfaceY(bx, bz);
+              const blockId = engineRef.current.getBlock(bx, by, bz);
+              const blockDef = engineRef.current.blocksByNum.get(blockId);
+              if (
+                blockDef &&
+                canTornadoLiftBlock(
+                  blockId,
+                  blockDef.hardness,
+                  windMph,
+                  settingsRef.current.tornadoBlockDestruction
+                )
+              ) {
+                engineRef.current.setBlock(bx, by, bz, 0, false).forEach((k) => dirtyLiftChunks.add(k));
+                spawnDebrisBurstRef.current(bx + 0.5, by + 1.0, bz + 0.5, blockDef.colorTop, 3);
+              }
+            }
+            dirtyLiftChunks.forEach((k) => {
+              const [cx, cz] = k.split(',').map(Number);
+              rebuildChunkThreeMeshRef.current(cx, cz);
+            });
+          }
 
           // Tangential + inward suction force when player is near vortex
           if (gameModeRef.current === 'survival') {
@@ -2251,7 +2591,6 @@ export default function App() {
               const wz = player.z + pt.dz;
               const localW = weather2Ref.current.sampleLocalWindField(wx, wy, wz);
 
-              // Update particle velocity directly from windVec + local vortex wind field
               const targetVx = windVec.vx * 0.55 + (localW.vx - windVec.vx) * 0.75;
               const targetVz = windVec.vz * 0.55 + (localW.vz - windVec.vz) * 0.75;
               pt.vx += (targetVx - pt.vx) * Math.min(1, dt * 6.0);
@@ -2286,7 +2625,6 @@ export default function App() {
                 dummyScale.set(0.65, 1.4, 0.65);
               }
               dummyPos.set(player.x + pt.dx, player.y + pt.y, player.z + pt.dz);
-              // Tilt precipitation streak along its live velocity vector (pt.vx, pt.vy, pt.vz)
               const fallSpeed = Math.max(4.0, -pt.vy);
               dummyRot.set(
                 Math.atan2(pt.vz, fallSpeed) * 0.55,
@@ -2301,7 +2639,7 @@ export default function App() {
           precipInstanced.instanceMatrix.needsUpdate = true;
         }
 
-        // Update 3D Lightning Bolts & Meteor Shower Impacts
+        // §6 Phase 1: Update Midpoint-Displacement Jagged 3D Lightning Bolts & Distance-Delayed Thunder
         const hasLightning =
           activeDisaster === 'thunder' ||
           activeDisaster === 'tornado_f1' ||
@@ -2314,10 +2652,26 @@ export default function App() {
             const lx = player.x + (Math.random() - 0.5) * 44;
             const lz = player.z - 12 + (Math.random() - 0.5) * 32;
             const ly = engineRef.current.computeSurfaceY(Math.round(lx), Math.round(lz));
+            const boltPts = generateJaggedLightningBolt(
+              0,
+              52,
+              0,
+              0,
+              0,
+              0,
+              Math.floor(elapsed * 100)
+            );
+            for (let s = 0; s < Math.min(lightningBoltGroup.children.length, boltPts.length - 1); s++) {
+              const p0 = boltPts[s];
+              const p1 = boltPts[s + 1];
+              const segMesh = lightningBoltGroup.children[s] as THREE.Mesh;
+              segMesh.position.set((p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5, (p0[2] + p1[2]) * 0.5);
+            }
             lightningBoltGroup.position.set(lx, ly, lz);
             lightningBoltGroup.visible = true;
             cloudUniforms.uLightningFlash.value = 1.0;
             player.trauma = Math.min(1.0, player.trauma + 0.28);
+            audioRef.current.playDistanceDelayedThunder(Math.hypot(lx - player.x, lz - player.z));
           } else if (cloudUniforms.uLightningFlash.value < 0.35) {
             lightningBoltGroup.visible = false;
           }
@@ -2336,33 +2690,75 @@ export default function App() {
           }
         }
 
-        // Update 3 Distinct Mob Archetypes (Forager, Chaser, Kiter)
-        for (const mob of mobs) {
-          const dx = player.x - mob.x;
-          const dz = player.z - mob.z;
-          const dist = Math.hypot(dx, dz) || 1;
-          if (mob.archetype === 'forager') {
-            mob.yaw = Math.sin(elapsed * 0.4 + mob.id) * Math.PI;
-            mob.vx = Math.sin(mob.yaw) * 1.1;
-            mob.vz = Math.cos(mob.yaw) * 1.1;
-          } else if (mob.archetype === 'chaser') {
-            mob.yaw = Math.atan2(dx, dz);
-            const spd = dist < 16 ? 2.1 : 0.7;
-            mob.vx = (dx / dist) * spd;
-            mob.vz = (dz / dist) * spd;
-          } else {
-            // Kiter maintains 6-10m standoff distance
-            mob.yaw = Math.atan2(dx, dz);
-            const dirSign = dist < 6 ? -1 : dist > 11 ? 1 : 0;
-            mob.vx = (dx / dist) * dirSign * 1.8;
-            mob.vz = (dz / dist) * dirSign * 1.8;
+        // §4 & §5: Step Hostile Mob AI (Zombie, Skeleton, Spider, Creeper) & Pooled Parabolic Arrows
+        const mobEvents = mobManagerRef.current.stepAll(
+          dt,
+          { x: player.x, y: player.y - 1.62, z: player.z },
+          isDaytimeRef.current,
+          (wx, wy, wz) => {
+            const bid = engineRef.current.getBlock(wx, wy, wz);
+            return bid !== 0 && bid !== 6;
+          },
+          (wx, wz) => engineRef.current.computeSurfaceY(wx, wz) + 1
+        );
+        mobManagerRef.current.syncMobMeshesToScene(scene);
+
+        // Apply tornado suction to hostile mobs when tornado is active (§6 Phase 2)
+        if (tornadoActive) {
+          for (const m of mobManagerRef.current.mobs) {
+            const lw = weather2Ref.current.sampleLocalWindField(m.x, m.y, m.z);
+            if (lw.stormProximity > 0.12) {
+              m.x += lw.vx * dt * 0.25;
+              m.z += lw.vz * dt * 0.25;
+            }
           }
-          mob.x += mob.vx * dt;
-          mob.z += mob.vz * dt;
-          mob.y = engineRef.current.computeSurfaceY(Math.round(mob.x), Math.round(mob.z)) + 1;
-          mob.group.position.set(mob.x, mob.y, mob.z);
-          mob.group.rotation.y = mob.yaw;
         }
+
+        for (const snd of mobEvents.sounds) {
+          audioRef.current.playSoundEffect(snd);
+        }
+        for (const ex of mobEvents.creeperExplosions) {
+          triggerExplosionRef.current(ex.x, ex.y, ex.z, ex.radius);
+          showToast('Camo Bomber detonated! (Spherical terrain destruction)');
+        }
+        for (const fp of mobEvents.flameParticles) {
+          if (Math.random() < 0.35) {
+            spawnDebrisBurstRef.current(fp.x, fp.y, fp.z, [1.0, 0.55, 0.1], 1);
+          }
+        }
+        for (const sp of mobEvents.deathSmokeParticles) {
+          spawnDebrisBurstRef.current(sp.x, sp.y, sp.z, [0.85, 0.85, 0.88], 10);
+        }
+        if (mobEvents.playerDamaged > 0) {
+          triggerPlayerHurt(playerAnimState);
+          player.trauma = Math.min(1.0, player.trauma + 0.35);
+          player.vx += mobEvents.playerKnockback[0];
+          player.vz += mobEvents.playerKnockback[1];
+          if (gameModeRef.current === 'survival') {
+            setHealth((h) => Math.max(1, h - mobEvents.playerDamaged));
+          }
+        }
+
+        // Sync Pooled Parabolic Arrows to `arrowInstanced`
+        for (let i = 0; i < 24; i++) {
+          const arr = mobManagerRef.current.arrows[i];
+          if (arr && arr.active) {
+            dummyPos.set(arr.x, arr.y, arr.z);
+            dummyRot.set(
+              -Math.atan2(arr.vy, Math.hypot(arr.vx, arr.vz)),
+              Math.atan2(arr.vx, arr.vz),
+              0
+            );
+            dummyQuat.setFromEuler(dummyRot);
+            dummyScale.set(1, 1, 1);
+          } else {
+            dummyPos.set(0, -999, 0);
+            dummyScale.set(0, 0, 0);
+          }
+          dummyMatrix.compose(dummyPos, dummyQuat, dummyScale);
+          arrowInstanced.setMatrixAt(i, dummyMatrix);
+        }
+        arrowInstanced.instanceMatrix.needsUpdate = true;
 
         // Update WorldEdit / Axiom 3D Wireframe Box
         if (wePos1Ref.current && wePos2Ref.current) {
@@ -2413,6 +2809,8 @@ export default function App() {
             ) === 6
           );
           setBlastFlashHud((prev) => Math.max(0, prev - 0.12));
+          setActiveMobCountHud(mobManagerRef.current.mobs.length);
+          setPmStormCellsHud([...weather2Ref.current.stormCells]);
 
           // Update Weather2 Wind Vector & 3D Volumetric Cloud Density Telemetry
           const overheadDensity = weather2Ref.current.sampleVolumetricCloudDensity(
@@ -2433,8 +2831,11 @@ export default function App() {
                 player.z - tornadoGroup.position.z
               )
             );
+            const cell0 = weather2Ref.current.stormCells[0];
+            setTornadoEfLabelHud(cell0 ? formatTornadoHudLabel(cell0.efRating, cell0.windSpeedMph) : '竜巻接地：EF1');
           } else {
             setTornadoDistHud(null);
+            setTornadoEfLabelHud(null);
           }
         }
       }
@@ -2516,7 +2917,7 @@ export default function App() {
         />
       )}
 
-      {/* Playing HUD (Jade, Survival Pips, Hotbar, Mod Dock) */}
+      {/* Playing HUD (Jade, Survival Pips, Hotbar, Mod Dock, WSR-88D Radar, Distant Horizons LOD) */}
       {gameState !== 'title' && (
         <GameHud
           jadeTarget={jadeTarget}
@@ -2538,11 +2939,24 @@ export default function App() {
             setWeatherState(d);
             weather2Ref.current.setDisaster(d);
             showToast(
-              `Weather2 Remastered: ${WEATHER2_DISASTERS[d].jpLabel} (Wind ${WEATHER2_DISASTERS[d].windSpeedRange[1]} m/s)`
+              `PMWeather + Weather2: ${WEATHER2_DISASTERS[d].jpLabel} (Wind ${WEATHER2_DISASTERS[d].windSpeedRange[1]} m/s)`
             );
           }}
           windTelemetry={windTelemetry}
           tornadoDistance={tornadoDistHud}
+          tornadoEfLabel={tornadoEfLabelHud}
+          pmStormCells={pmStormCellsHud}
+          distantHorizonsEnabled={settings.distantHorizonsLod}
+          distantHorizonsLodChunks={dhLodChunkCountHud}
+          thirdPersonView={thirdPersonView}
+          onToggleThirdPersonView={() => setThirdPersonView((v) => !v)}
+          isDaytime={isDaytime}
+          onToggleDayNight={() => setIsDaytime((d) => !d)}
+          activeMobCount={activeMobCountHud}
+          onSpawnHostileWave={() => {
+            spawnHostileMobWaveRef.current();
+            showToast('Spawned 4 Hostile Mob Archetypes (Zombie, Skeleton, Spider, Creeper)!');
+          }}
           axiomMode={axiomMode}
           axiomSymmetry={axiomSymmetry}
           onToggleAxiom={() => {
@@ -2582,13 +2996,28 @@ export default function App() {
           enhancedVisuals={settings.enhancedVisuals}
           lastToast={lastToast}
           activeShaderPackName={activeShaderPack.name}
-          onOpenShadersAndMods={() => setActiveModal('shaders_mods')}
+          onOpenShadersAndMods={() => {
+            setShadersModsInitialTab('mods');
+            setActiveModal('shaders_mods');
+          }}
+          onOpenSodiumSettings={() => {
+            setShadersModsInitialTab('sodium');
+            setActiveModal('shaders_mods');
+          }}
+          taczAmmo={taczAmmoHud}
+          taczMaxAmmo={taczMaxAmmoHud}
+          taczReloading={taczReloadingHud}
+          taczAdsActive={taczAdsHud}
+          barrelRollEnabled={hotbarIds[selectedSlot] === 275}
+          barrelRollAngleDeg={barrelRollDegHud}
+          pitchAngleDeg={pitchDegHud}
         />
       )}
 
       {/* Java Edition Shader Packs (Iris/OptiFine .zip) & Java Mods (.jar / .zip) Modal */}
       {activeModal === 'shaders_mods' && (
         <JavaShadersAndModsModal
+          initialTab={shadersModsInitialTab}
           shaderPacks={shaderPacks}
           activeShaderPackId={activeShaderPack.id}
           onSelectShaderPack={(pack) => {
@@ -2618,12 +3047,30 @@ export default function App() {
             });
             showToast(`Equipped Java Mod Block: ${blockDef.name} (${blockDef.id}) in Slot ${selectedSlot + 1}`);
           }}
+          settings={settings}
+          setSettings={setSettings}
+          sodiumSettings={sodiumSettings}
+          setSodiumSettings={setSodiumSettings}
+          onReplayChunkFadeIn={() => {
+            rebuildDistantHorizonsLodRef.current();
+            showToast('Sodium 0.8 + Distant Horizons 3.3.4 LOD Chunks Re-synchronized.');
+          }}
+          barrelRollConfig={barrelRollConfig}
+          setBarrelRollConfig={setBarrelRollConfig}
+          taczLoadout={taczLoadout}
+          setTaczLoadout={setTaczLoadout}
+          onSelectWeatherDisaster={(d) => {
+            setWeatherState(d);
+            weather2Ref.current.setDisaster(d);
+          }}
+          currentWeather={weatherState}
+          loadedChunkCount={loadedChunkCount}
           engine={engineRef.current}
           onClose={() => setActiveModal('none')}
         />
       )}
 
-      {/* Inventory + Crafting + JEI Modal */}
+      {/* Inventory + Crafting + JEI + TaCZ Gun Smith JSON Inspector Modal */}
       {activeModal === 'inventory' && (
         <InventoryJeiModal
           allBlocks={allBlocks}

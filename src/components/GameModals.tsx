@@ -8,6 +8,7 @@ import {
 } from '../engine/voxelEngine';
 import { EngineSettings } from './TitleScreen';
 import { TEXTURE_RESOLUTIONS, TextureResolution } from '../engine/textures';
+import { TACZ_GUN_REGISTRY, exportTaczGunDataJson, TaczGunSpec } from '../engine/taczGunEngine';
 
 interface InventoryJeiModalProps {
   allBlocks: BlockDefinition[];
@@ -26,11 +27,12 @@ export const InventoryJeiModal: React.FC<InventoryJeiModalProps> = ({
 }) => {
   const [jeiSearch, setJeiSearch] = useState('');
   const [guiStation, setGuiStation] = useState<
-    'inventory' | 'crafting_table' | 'furnace' | 'enchanting' | 'anvil' | 'brewing'
+    'inventory' | 'crafting_table' | 'tacz_gun_smith' | 'furnace' | 'enchanting' | 'anvil' | 'brewing'
   >('inventory');
   const [selectedRecipe, setSelectedRecipe] = useState<CraftingRecipe | null>(
     CRAFTING_RECIPES_26_3[3]
   );
+  const [selectedTaczGun, setSelectedTaczGun] = useState<TaczGunSpec>(TACZ_GUN_REGISTRY[0]);
 
   const filteredItems = allBlocks.filter(
     (b) =>
@@ -62,11 +64,12 @@ export const InventoryJeiModal: React.FC<InventoryJeiModalProps> = ({
             </button>
           </div>
 
-          {/* Station Tabs: 2x2 Inventory, 3x3 Crafting Table, Furnace, Enchanting, Anvil, Brewing */}
+          {/* Station Tabs: 2x2 Inventory, 3x3 Crafting Table, TaCZ Gun Smith, Furnace, Enchanting, Anvil, Brewing */}
           <div className="flex flex-wrap gap-1.5">
             {[
               { id: 'inventory' as const, label: '2x2 Inventory' },
               { id: 'crafting_table' as const, label: '3x3 Crafting' },
+              { id: 'tacz_gun_smith' as const, label: 'TaCZ Gun Smith (11 Guns)' },
               { id: 'furnace' as const, label: 'Furnace' },
               { id: 'enchanting' as const, label: 'Enchanting' },
               { id: 'anvil' as const, label: 'Anvil' },
@@ -84,6 +87,48 @@ export const InventoryJeiModal: React.FC<InventoryJeiModalProps> = ({
               </button>
             ))}
           </div>
+
+          {guiStation === 'tacz_gun_smith' && (
+            <div className="p-3.5 bg-slate-950/95 border border-amber-400/70 flex flex-col gap-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-pixel text-amber-300">
+                  TaCZ Default Gun Pack (`data/tacz/guns/*.json`) · 11 Firearms
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onAssignHotbarSlot(selectedSlot, selectedTaczGun.numericId)}
+                  className="mc-btn mc-btn-primary px-3 py-1 font-pixel text-xs"
+                >
+                  Equip {selectedTaczGun.name.split(' ')[1]} → Slot #{selectedSlot + 1}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto">
+                {TACZ_GUN_REGISTRY.map((gun) => (
+                  <button
+                    key={gun.itemId}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTaczGun(gun);
+                      onAssignHotbarSlot(selectedSlot, gun.numericId);
+                    }}
+                    className={`p-1.5 text-left border cursor-pointer ${
+                      selectedTaczGun.itemId === gun.itemId
+                        ? 'bg-amber-950/80 border-amber-400 text-white'
+                        : 'bg-slate-900 border-slate-700 text-slate-300'
+                    }`}
+                  >
+                    <div className="font-pixel text-[10px] text-amber-300 truncate">{gun.name}</div>
+                    <div className="text-[10px] font-mono-tabular text-emerald-300">
+                      {gun.rpm} RPM · DMG {gun.damage} · {gun.magCapacity}r
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <pre className="p-2 bg-black/90 border border-slate-800 text-[10px] font-mono-tabular text-cyan-300 max-h-32 overflow-y-auto">
+                {exportTaczGunDataJson(selectedTaczGun)}
+              </pre>
+            </div>
+          )}
 
           {/* Crafting / Station Panel */}
           <div className="p-4 bg-slate-900/90 border border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -474,7 +519,29 @@ export const PauseModal: React.FC<PauseModalProps> = ({
               settings.weather2Tornado ? 'mc-btn-primary' : ''
             }`}
           >
-            Weather2 Tornado: {settings.weather2Tornado ? 'ON' : 'OFF'}
+            PMWeather Tornado: {settings.weather2Tornado ? 'ON' : 'OFF'}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setSettings((s) => ({ ...s, tornadoBlockDestruction: !s.tornadoBlockDestruction }))
+            }
+            className={`mc-btn py-2 px-3 font-pixel ${
+              settings.tornadoBlockDestruction ? 'mc-btn-primary' : ''
+            }`}
+          >
+            Tornado Block Break: {settings.tornadoBlockDestruction ? 'ON' : 'OFF'}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setSettings((s) => ({ ...s, distantHorizonsLod: !s.distantHorizonsLod }))
+            }
+            className={`mc-btn py-2 px-3 font-pixel ${
+              settings.distantHorizonsLod ? 'mc-btn-primary' : ''
+            }`}
+          >
+            Distant Horizons 3.3.4: {settings.distantHorizonsLod ? 'ON' : 'OFF'}
           </button>
         </div>
 

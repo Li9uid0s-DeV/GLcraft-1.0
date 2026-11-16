@@ -5,6 +5,8 @@
  * zero-GC TypedArrays (`Uint16Array`, `Float32Array`) for instant execution in the browser.
  */
 
+import { getAtlasUvRect, computeChunkFloodFillLighting } from './voxelAtlasAndLighting';
+
 export type WorldTypeId =
   | 'normal'
   | 'jj_thunder'
@@ -247,6 +249,24 @@ export const INITIAL_BLOCKS_26_3: BlockDefinition[] = [
     colorSide: [0.88, 0.92, 0.97],
     colorBottom: [0.80, 0.85, 0.92],
     accentHex: '#f2f7ff',
+  },
+  {
+    numericId: 13,
+    id: 'minecraft:glowstone',
+    name: 'Glowstone (Luminance 15)',
+    modId: 'minecraft',
+    modName: 'Minecraft 26.3',
+    category: 'utility',
+    hardness: 0.3,
+    blastResistance: 0.3,
+    properTool: 'pickaxe',
+    opaque: true,
+    lightLevel: 15,
+    colorTop: [1.0, 0.92, 0.52],
+    colorSide: [0.96, 0.86, 0.44],
+    colorBottom: [0.88, 0.78, 0.36],
+    accentHex: '#ffea85',
+    description: 'Emits maximum level-15 block light that flood-fills caves up to 15 blocks away.',
   },
   // 26.3 Wilderness Bound additions
   {
@@ -802,6 +822,140 @@ export const INITIAL_BLOCKS_26_3: BlockDefinition[] = [
     colorBottom: [0.12, 0.48, 0.72],
     accentHex: '#38bdf8',
     description: 'Right-click or press [G] to toggle 6-DOF Aircraft Roll/Pitch/Yaw Flight & [Z]/[X] 360° Barrel Roll!',
+  },
+  {
+    numericId: 276,
+    id: 'tacz:ak47',
+    name: 'TaCZ AKM 7.62x39mm Assault Rifle',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'tools',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.43, 0.26, 0.15],
+    colorSide: [0.38, 0.22, 0.13],
+    colorBottom: [0.15, 0.16, 0.18],
+    accentHex: '#b87333',
+    description: '600 RPM 7.62x39mm Soviet assault rifle (`data/tacz/guns/ak47.json`). High stopping power.',
+  },
+  {
+    numericId: 277,
+    id: 'tacz:hk416d',
+    name: 'TaCZ HK416D Operator Carbine',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'tools',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.24, 0.23, 0.20],
+    colorSide: [0.76, 0.61, 0.38],
+    colorBottom: [0.16, 0.16, 0.15],
+    accentHex: '#c29b61',
+    description: '850 RPM 5.56x45mm short-stroke gas piston carbine (`data/tacz/guns/hk416d.json`).',
+  },
+  {
+    numericId: 278,
+    id: 'tacz:vector45',
+    name: 'TaCZ KRISS Vector .45 ACP SMG',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'tools',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.16, 0.18, 0.22],
+    colorSide: [0.35, 0.78, 0.98],
+    colorBottom: [0.12, 0.14, 0.16],
+    accentHex: '#5ac8fa',
+    description: '1,200 RPM .45 ACP submachine gun with Super V recoil mitigation (`data/tacz/guns/vector45.json`).',
+  },
+  {
+    numericId: 279,
+    id: 'tacz:m95',
+    name: 'TaCZ Barrett M95 .50 BMG Anti-Materiel',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'explosives',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.22, 0.24, 0.23],
+    colorSide: [1.0, 0.42, 0.21],
+    colorBottom: [0.14, 0.15, 0.15],
+    accentHex: '#ff6b35',
+    tntRadius: 2,
+    description: '.50 BMG bullpup anti-materiel sniper rifle (`data/tacz/guns/m95.json`). Shatters blocks on impact.',
+  },
+  {
+    numericId: 280,
+    id: 'tacz:m870',
+    name: 'TaCZ Remington M870 12-Gauge Shotgun',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'tools',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.31, 0.22, 0.16],
+    colorSide: [0.26, 0.18, 0.13],
+    colorBottom: [0.13, 0.14, 0.16],
+    accentHex: '#a86b43',
+    description: '12-Gauge tactical pump shotgun (`data/tacz/guns/m870.json`).',
+  },
+  {
+    numericId: 281,
+    id: 'tacz:m249',
+    name: 'TaCZ FN M249 SAW (100-Round LMG)',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'tools',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.19, 0.21, 0.23],
+    colorSide: [0.42, 0.49, 0.35],
+    colorBottom: [0.14, 0.15, 0.17],
+    accentHex: '#7da15e',
+    description: '100-round 5.56mm squad automatic weapon (`data/tacz/guns/m249.json`).',
+  },
+  {
+    numericId: 282,
+    id: 'tacz:glock_17',
+    name: 'TaCZ Glock 17 9x19mm Sidearm',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'tools',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.14, 0.15, 0.18],
+    colorSide: [0.54, 0.58, 0.62],
+    colorBottom: [0.10, 0.11, 0.13],
+    accentHex: '#8b949e',
+    description: '9x19mm semi-automatic tactical sidearm (`data/tacz/guns/glock_17.json`).',
   },
 ];
 
@@ -1699,6 +1853,7 @@ export class VoxelEngineCore {
   buildChunkMesh(cx: number, cz: number): ChunkMeshResult {
     const key = VoxelEngineCore.chunkKey(cx, cz);
     const chunk = this.chunks.get(key) ?? this.generateChunk(cx, cz);
+    const lightMap = computeChunkFloodFillLighting(chunk, this.blocksByNum);
 
     const oPos: number[] = [];
     const oNorm: number[] = [];
@@ -1752,12 +1907,24 @@ export class VoxelEngineCore {
                 col = this.blendedGrassColor(wx, wz);
               }
 
+              // Flood-fill SkyLight (0..15) + BlockLight (0..15) sampled at the exposed air neighbor
+              const sampleLx = Math.max(0, Math.min(15, nx));
+              const sampleLz = Math.max(0, Math.min(15, nz));
+              const sampleWy = wy + face.dy;
+              const skyL = lightMap.getSkyLight(sampleLx, sampleWy, sampleLz);
+              const blkL = Math.max(def.lightLevel ?? 0, lightMap.getBlockLight(sampleLx, sampleWy, sampleLz));
+              const combinedLight = Math.max(skyL, blkL);
+              const lightFactor = 0.24 + 0.76 * (combinedLight / 15.0);
+              // Warm torch/emissive tint when BlockLight exceeds SkyLight in caves
+              const warmBoostR = blkL > skyL ? (blkL - skyL) * 0.015 : 0;
+              const warmBoostG = blkL > skyL ? (blkL - skyL) * 0.008 : 0;
+
               const triOrder = [0, 1, 2, 0, 2, 3];
               // Subtle deterministic per-block brightness variation for visual depth
               const microShade = 0.96 + ((wx * 19 + wy * 31 + wz * 13) & 7) * 0.01;
-              const baseR = col[0] * face.shade * microShade;
-              const baseG = col[1] * face.shade * microShade;
-              const baseB = col[2] * face.shade * microShade;
+              const baseR = col[0] * face.shade * microShade * lightFactor + warmBoostR;
+              const baseG = col[1] * face.shade * microShade * lightFactor + warmBoostG;
+              const baseB = col[2] * face.shade * microShade * lightFactor;
 
               if (def.isLiquid) {
                 for (let i = 0; i < 6; i++) {
@@ -1775,6 +1942,8 @@ export class VoxelEngineCore {
                   this.computeCornerAO(chunk, lx, ly, lz, wx, wy, wz, f, face.corners[2]),
                   this.computeCornerAO(chunk, lx, ly, lz, wx, wy, wz, f, face.corners[3]),
                 ];
+                // Map the [0,1] face UVs into the 16x16 pixel-art Texture Atlas tile [u0, v0, u1, v1]
+                const [u0, v0, u1, v1] = getAtlasUvRect(blockId, f);
                 for (let i = 0; i < 6; i++) {
                   const ci = triOrder[i];
                   const c = face.corners[ci];
@@ -1787,7 +1956,7 @@ export class VoxelEngineCore {
                     Math.min(1, baseG * ao),
                     Math.min(1, baseB * ao)
                   );
-                  oUv.push(uv[0], uv[1]);
+                  oUv.push(u0 + uv[0] * (u1 - u0), v0 + uv[1] * (v1 - v0));
                 }
               }
             }

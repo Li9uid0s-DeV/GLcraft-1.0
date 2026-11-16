@@ -191,18 +191,287 @@ export const WEATHER2_DISASTERS: Record<WeatherDisasterType, WeatherDisasterMeta
 
 export const WEATHER2_DISASTER_LIST: WeatherDisasterMeta[] = Object.values(WEATHER2_DISASTERS);
 
+/**
+ * §6: ProtoManly's Weather (PMWeather) Authentic Mod Parameters & Storm Cell Lifecycle
+ * Extracted from ProtoManly's Weather (`pmweather-common.toml` / `ServerConfig`):
+ * - Stage 1 (`chanceInOneOfStage1`): Ordinary Cumulonimbus Thunderstorm
+ * - Stage 2 (`chanceInOneOfSquall` / `chanceInOneOfStage2`): Squall Line or Rotating Supercell Mesocyclone
+ * - Stage 3 (`chanceInOneOfStage3`): Tornado Touchdown (EF0..EF5, up to 321 mph)
+ * - WSR-88D Radar Modes: Reflectivity (`dBZ`), Radial Velocity (Hook Echo), Thermodynamic Debug (`CAPE`, `3CAPE`, `SRH`, `LCL`)
+ */
+export type PmWeatherStage =
+  | 'stage0_developing'
+  | 'stage1_thunderstorm'
+  | 'stage2_squall'
+  | 'stage2_supercell'
+  | 'stage3_tornado'
+  | 'dissipating';
+
+export type EfRating = 'NONE' | 'EF0' | 'EF1' | 'EF2' | 'EF3' | 'EF4' | 'EF5';
+export type Wsr88dRadarMode = 'reflectivity_dbz' | 'velocity_doppler' | 'thermodynamic_cape';
+
+export interface PmWeatherServerConfig {
+  spawnRangeBlocks: number; // default 384 in PMWeather
+  stormChancePerMinute: number; // default 0.35
+  chanceInOneOfStage1: number; // default 3
+  chanceInOneOfSquall: number; // default 4
+  chanceInOneOfStage2: number; // default 3 (Supercell)
+  chanceInOneOfStage3: number; // default 2 (Tornado touchdown)
+  maxIntensityEfCap: number; // 0..5 (EF0..EF5)
+  tornadoBlockDestruction: boolean; // §6 Phase 3: ON/OFF toggle for lifting terrain blocks
+  maxBlocksDestroyedPerTick: number; // Per-tick cap to prevent frame drops (§6 Phase 3)
+  aimAtPlayer: boolean;
+  radarMode: Wsr88dRadarMode;
+}
+
+export const DEFAULT_PMWEATHER_CONFIG: PmWeatherServerConfig = {
+  spawnRangeBlocks: 384,
+  stormChancePerMinute: 0.35,
+  chanceInOneOfStage1: 3,
+  chanceInOneOfSquall: 4,
+  chanceInOneOfStage2: 3,
+  chanceInOneOfStage3: 2,
+  maxIntensityEfCap: 5,
+  tornadoBlockDestruction: true,
+  maxBlocksDestroyedPerTick: 3,
+  aimAtPlayer: true,
+  radarMode: 'reflectivity_dbz',
+};
+
+export interface PmStormCell {
+  id: number;
+  x: number;
+  z: number;
+  vx: number;
+  vz: number;
+  radius: number;
+  intensity: number; // 0.0 .. 1.0
+  stage: PmWeatherStage;
+  ageSec: number;
+  lifetimeSec: number;
+  funnelDescent: number; // 0.0 (aloft) .. 1.0 (touchdown over ~10 seconds per §6 Phase 2)
+  windSpeedMph: number; // 40 .. 321 mph
+  efRating: EfRating;
+  dbzReflectivity: number; // 15 .. 72 dBZ on WSR-88D Radar
+  capeJkg: number; // Convective Available Potential Energy (J/kg, up to 5500+)
+  srhM2s2: number; // Storm-Relative Helicity (m^2/s^2, 150..650)
+  hasHookEcho: boolean;
+}
+
+/**
+ * Enhanced Fujita Scale (EF0–EF5) wind speed classification used in ProtoManly's Weather (§6 Phase 3).
+ */
+export function computeEfRatingFromMph(mph: number, touchedDown: boolean): EfRating {
+  if (!touchedDown || mph < 65) return 'NONE';
+  if (mph < 86) return 'EF0';
+  if (mph < 111) return 'EF1';
+  if (mph < 136) return 'EF2';
+  if (mph < 166) return 'EF3';
+  if (mph < 200) return 'EF4';
+  return 'EF5';
+}
+
+export function formatTornadoHudLabel(efRating: EfRating, windMph: number): string {
+  if (efRating === 'NONE') return '竜巻未接地（上空渦）';
+  return `竜巻接地：${efRating} (${Math.round(windMph)} mph)`;
+}
+
+/**
+ * §6 Phase 3: Determines whether a block at `(hardness, numericId)` can be lifted by the tornado wind field.
+ * - Bedrock (5) and liquids (6) are never lifted.
+ * - Soft blocks (leaves, shrub, grass, sand, dirt, snow, TNT) are lifted first (EF0–EF2).
+ * - Hard blocks (logs, planks, cobblestone, stone) require strong EF3–EF5 wind speeds.
+ */
+export function canTornadoLiftBlock(
+  blockNumericId: number,
+  blockHardness: number,
+  windStrengthMph: number,
+  blockDestructionEnabled: boolean
+): boolean {
+  if (!blockDestructionEnabled) return false;
+  if (blockNumericId === 0 || blockNumericId === 5 || blockNumericId === 6) return false;
+  if (blockHardness < 0) return false;
+  // Convert wind mph (65..300) into an effective hardness threshold (0.25 .. 2.8)
+  const effectiveWindHardness = Math.max(0, (windStrengthMph - 62) / 72);
+  return blockHardness <= effectiveWindHardness;
+}
+
+/**
+ * §6 Phase 1: Generates a jagged 3D lightning bolt polyline from cloud altitude (`yStart = 112`)
+ * down to ground `(xEnd, yEnd, zEnd)` via recursive midpoint displacement.
+ */
+export function generateJaggedLightningBolt(
+  xStart: number,
+  yStart: number,
+  zStart: number,
+  xEnd: number,
+  yEnd: number,
+  zEnd: number,
+  seed = 1
+): Array<[number, number, number]> {
+  let pts: Array<[number, number, number]> = [
+    [xStart, yStart, zStart],
+    [xEnd, yEnd, zEnd],
+  ];
+  let disp = 6.5;
+  let s = seed;
+  const randSigned = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return (s / 4294967295) * 2 - 1;
+  };
+  for (let iter = 0; iter < 4; iter++) {
+    const next: Array<[number, number, number]> = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const mx = (a[0] + b[0]) * 0.5 + randSigned() * disp;
+      const my = (a[1] + b[1]) * 0.5 + randSigned() * (disp * 0.25);
+      const mz = (a[2] + b[2]) * 0.5 + randSigned() * disp;
+      next.push(a, [mx, my, mz]);
+    }
+    next.push(pts[pts.length - 1]);
+    pts = next;
+    disp *= 0.52;
+  }
+  return pts;
+}
+
 export class Weather2Simulation {
   activeDisaster: WeatherDisasterType = 'clear';
   windAngleRad = 0.55; // Wind blowing direction in radians
   windSpeed = 5.5; // m/s
   windOffset = { x: 0, y: 0, z: 0 }; // Cumulative 3D cloud advection offset
-  stormCenter = { x: -14, z: -18 };
+  stormCenter = { x: -18, z: -22 };
   lightningFlash = 0;
+  pmConfig: PmWeatherServerConfig = { ...DEFAULT_PMWEATHER_CONFIG };
+  stormCells: PmStormCell[] = [];
+  private nextCellId = 1;
+
+  constructor() {
+    this.seedInitialStormCells();
+  }
+
+  seedInitialStormCells(): void {
+    this.stormCells = [
+      {
+        id: this.nextCellId++,
+        x: -18,
+        z: -22,
+        vx: 1.8,
+        vz: 1.1,
+        radius: 36,
+        intensity: 0.28,
+        stage: 'stage1_thunderstorm',
+        ageSec: 12,
+        lifetimeSec: 240,
+        funnelDescent: 0,
+        windSpeedMph: 48,
+        efRating: 'NONE',
+        dbzReflectivity: 38,
+        capeJkg: 1850,
+        srhM2s2: 190,
+        hasHookEcho: false,
+      },
+      {
+        id: this.nextCellId++,
+        x: 34,
+        z: -38,
+        vx: -1.4,
+        vz: 1.5,
+        radius: 44,
+        intensity: 0.62,
+        stage: 'stage2_supercell',
+        ageSec: 45,
+        lifetimeSec: 300,
+        funnelDescent: 0.25,
+        windSpeedMph: 74,
+        efRating: 'NONE',
+        dbzReflectivity: 56,
+        capeJkg: 3420,
+        srhM2s2: 380,
+        hasHookEcho: true,
+      },
+    ];
+  }
 
   setDisaster(disaster: WeatherDisasterType): void {
     this.activeDisaster = disaster;
     const meta = WEATHER2_DISASTERS[disaster];
     this.windSpeed = (meta.windSpeedRange[0] + meta.windSpeedRange[1]) * 0.5;
+
+    // Synchronize primary storm cell with selected disaster so WSR-88D radar & EF HUD reflect it immediately
+    if (this.stormCells.length === 0) {
+      this.seedInitialStormCells();
+    }
+    const primary = this.stormCells[0];
+    primary.x = this.stormCenter.x;
+    primary.z = this.stormCenter.z;
+
+    if (disaster === 'clear') {
+      primary.stage = 'stage0_developing';
+      primary.intensity = 0.18;
+      primary.funnelDescent = 0;
+      primary.windSpeedMph = 24;
+      primary.efRating = 'NONE';
+      primary.dbzReflectivity = 18;
+      primary.capeJkg = 650;
+      primary.srhM2s2 = 60;
+      primary.hasHookEcho = false;
+    } else if (disaster === 'rain' || disaster === 'sandstorm') {
+      primary.stage = 'stage1_thunderstorm';
+      primary.intensity = 0.52;
+      primary.funnelDescent = 0;
+      primary.windSpeedMph = 52;
+      primary.efRating = 'NONE';
+      primary.dbzReflectivity = 44;
+      primary.capeJkg = 1950;
+      primary.srhM2s2 = 180;
+      primary.hasHookEcho = false;
+    } else if (disaster === 'thunder' || disaster === 'hailstorm' || disaster === 'meteor_shower') {
+      primary.stage = 'stage2_supercell';
+      primary.intensity = 0.78;
+      primary.funnelDescent = 0.35;
+      primary.windSpeedMph = 78;
+      primary.efRating = 'NONE';
+      primary.dbzReflectivity = 59;
+      primary.capeJkg = 3650;
+      primary.srhM2s2 = 410;
+      primary.hasHookEcho = true;
+    } else if (disaster === 'tornado_f1') {
+      primary.stage = 'stage3_tornado';
+      primary.intensity = 0.86;
+      // Start descent or complete touchdown
+      primary.funnelDescent = Math.max(primary.funnelDescent, 0.85);
+      primary.windSpeedMph = 104;
+      primary.efRating = computeEfRatingFromMph(primary.windSpeedMph, true);
+      primary.dbzReflectivity = 64;
+      primary.capeJkg = 4200;
+      primary.srhM2s2 = 490;
+      primary.hasHookEcho = true;
+    } else if (disaster === 'tornado_f5' || disaster === 'hurricane') {
+      primary.stage = 'stage3_tornado';
+      primary.intensity = 0.98;
+      primary.funnelDescent = 1.0;
+      const capEf = this.pmConfig.maxIntensityEfCap;
+      const maxMphByCap = [80, 105, 130, 158, 192, 268][Math.max(0, Math.min(5, capEf))];
+      primary.windSpeedMph = disaster === 'hurricane' ? Math.min(maxMphByCap, 162) : maxMphByCap;
+      primary.efRating = computeEfRatingFromMph(primary.windSpeedMph, true);
+      primary.dbzReflectivity = 71;
+      primary.capeJkg = 5480;
+      primary.srhM2s2 = 640;
+      primary.hasHookEcho = true;
+    }
+  }
+
+  getActiveTornadoCell(): PmStormCell | null {
+    return (
+      this.stormCells.find((c) => c.stage === 'stage3_tornado' && c.funnelDescent >= 0.5) ?? null
+    );
+  }
+
+  getPrimaryStormCell(): PmStormCell {
+    if (this.stormCells.length === 0) this.seedInitialStormCells();
+    return this.stormCells[0];
   }
 
   getWindVector(): { vx: number; vz: number; speed: number; compassDeg: number } {
@@ -314,6 +583,41 @@ export class Weather2Simulation {
     if (this.stormCenter.z > 42) this.stormCenter.z = -42;
     if (this.stormCenter.z < -42) this.stormCenter.z = 42;
 
+    // Step PMWeather Storm Cells (§6 Phase 1–3)
+    if (this.stormCells.length === 0) {
+      this.seedInitialStormCells();
+    }
+    for (let i = 0; i < this.stormCells.length; i++) {
+      const cell = this.stormCells[i];
+      cell.ageSec += dt;
+      if (i === 0) {
+        cell.x = this.stormCenter.x;
+        cell.z = this.stormCenter.z;
+        cell.vx = vx * 0.22;
+        cell.vz = vz * 0.22;
+      } else {
+        cell.x += cell.vx * dt;
+        cell.z += cell.vz * dt;
+        if (cell.x > 64) cell.x = -64;
+        if (cell.x < -64) cell.x = 64;
+        if (cell.z > 64) cell.z = -64;
+        if (cell.z < -64) cell.z = 64;
+      }
+
+      // ~10s funnel descent when in Stage 3 Tornado (§6 Phase 2)
+      if (cell.stage === 'stage3_tornado') {
+        cell.funnelDescent = Math.min(1.0, cell.funnelDescent + dt / 10.0);
+        const capEf = this.pmConfig.maxIntensityEfCap;
+        const maxMphByCap = [80, 105, 130, 158, 192, 268][Math.max(0, Math.min(5, capEf))];
+        const baseMph = this.activeDisaster === 'tornado_f1' ? 104 : 235;
+        cell.windSpeedMph = Math.min(maxMphByCap, baseMph + Math.sin(elapsedSec * 0.8) * 12);
+        cell.efRating = computeEfRatingFromMph(cell.windSpeedMph, cell.funnelDescent >= 0.65);
+      } else {
+        cell.funnelDescent = Math.max(0, cell.funnelDescent - dt / 8.0);
+        cell.efRating = 'NONE';
+      }
+    }
+
     this.lightningFlash = Math.max(0, this.lightningFlash - dt * 3.2);
   }
 
@@ -402,3 +706,4 @@ export class Weather2Simulation {
     return Math.max(0, Math.min(1, raw));
   }
 }
+

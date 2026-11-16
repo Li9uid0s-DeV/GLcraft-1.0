@@ -4,6 +4,7 @@ import {
   WeatherDisasterType,
   WEATHER2_DISASTERS,
   WEATHER2_DISASTER_LIST,
+  PmStormCell,
 } from '../engine/weather2System';
 import { getTaczGunByNumericId } from '../engine/taczGunEngine';
 
@@ -70,6 +71,17 @@ interface GameHudProps {
   onToggleBarrelRollFlight?: () => void;
   onTrigger360BarrelRoll?: () => void;
   onReplayChunkFadeIn?: () => void;
+  // §2-§7: 3rd-Person Camera [F5], Day/Night [N], Hostile Mobs, PMWeather Radar & Distant Horizons 3.3.4 LOD
+  thirdPersonView?: boolean;
+  onToggleThirdPersonView?: () => void;
+  isDaytime?: boolean;
+  onToggleDayNight?: () => void;
+  activeMobCount?: number;
+  onSpawnHostileWave?: () => void;
+  pmStormCells?: PmStormCell[];
+  tornadoEfLabel?: string | null;
+  distantHorizonsEnabled?: boolean;
+  distantHorizonsLodChunks?: number;
 }
 
 export const GameHud: React.FC<GameHudProps> = ({
@@ -122,11 +134,22 @@ export const GameHud: React.FC<GameHudProps> = ({
   onToggleBarrelRollFlight,
   onTrigger360BarrelRoll,
   onReplayChunkFadeIn,
+  thirdPersonView = false,
+  onToggleThirdPersonView,
+  isDaytime = true,
+  onToggleDayNight,
+  activeMobCount = 0,
+  onSpawnHostileWave,
+  pmStormCells = [],
+  tornadoEfLabel = null,
+  distantHorizonsEnabled = true,
+  distantHorizonsLodChunks = 0,
 }) => {
   const [dockCollapsed, setDockCollapsed] = useState(false);
   const activeBlock = getBlockDef(hotbarIds[selectedSlot]);
   const activeTaczGun = activeBlock ? getTaczGunByNumericId(activeBlock.numericId) : undefined;
   const disasterMeta = WEATHER2_DISASTERS[weatherState];
+  const primaryCell = pmStormCells[0];
 
   return (
     <div className="fixed inset-0 z-10 pointer-events-none flex flex-col justify-between p-4">
@@ -230,8 +253,36 @@ export const GameHud: React.FC<GameHudProps> = ({
             </span>
           </div>
           <div className="text-emerald-300 text-[11px]">
-            Sodium + Lithium + ModernFix + ImmediatelyFast + Indium: ON
+            Sodium + Distant Horizons 3.3.4 ({distantHorizonsEnabled ? `${distantHorizonsLodChunks} LODs` : 'OFF'})
           </div>
+          <div className="text-slate-300 text-[11px]">
+            Time: {isDaytime ? 'Daylight (Zombie/Skeleton Burn)' : 'Night'} · Mobs: {activeMobCount}/24
+          </div>
+          {tornadoEfLabel && (
+            <div className="text-rose-300 font-pixel text-[11px] bg-rose-950/70 px-1.5 py-0.5 border border-rose-500/60">
+              {tornadoEfLabel}
+            </div>
+          )}
+          {primaryCell && (
+            <div className="text-amber-200 text-[11px] flex items-center gap-2">
+              <span>
+                WSR-88D: {primaryCell.dbzReflectivity} dBZ · CAPE {primaryCell.capeJkg} J/kg
+              </span>
+              {/* Compact WSR-88D Storm Cell Minimap Indicator (Green -> Yellow -> Red) */}
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-full border border-white/70"
+                style={{
+                  backgroundColor:
+                    primaryCell.dbzReflectivity >= 60
+                      ? '#ef4444'
+                      : primaryCell.dbzReflectivity >= 42
+                      ? '#eab308'
+                      : '#22c55e',
+                }}
+                title={`Storm Cell Stage: ${primaryCell.stage}`}
+              />
+            </div>
+          )}
           {barrelRollEnabled && (
             <div className="text-sky-300 font-pixel text-[11px]">
               Do a Barrel Roll: BANK {barrelRollAngleDeg >= 0 ? `+${barrelRollAngleDeg}` : barrelRollAngleDeg}° · PITCH {pitchAngleDeg}°
@@ -338,6 +389,50 @@ export const GameHud: React.FC<GameHudProps> = ({
               }`}
             >
               Barrel Roll [G]
+            </button>
+          )}
+          {onToggleThirdPersonView && (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label="Toggle 1st / 3rd Person Camera View [F5]"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onToggleThirdPersonView();
+              }}
+              className={`mc-btn px-2.5 py-2 text-xs font-pixel ${
+                thirdPersonView ? 'mc-btn-primary text-amber-200' : 'text-slate-200'
+              }`}
+            >
+              {thirdPersonView ? '3rd Person [F5]' : '1st Person [F5]'}
+            </button>
+          )}
+          {onToggleDayNight && (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label="Toggle Day or Night [N]"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onToggleDayNight();
+              }}
+              className="mc-btn px-2.5 py-2 text-xs font-pixel text-yellow-200"
+            >
+              {isDaytime ? 'Sun: Day [N]' : 'Moon: Night [N]'}
+            </button>
+          )}
+          {onSpawnHostileWave && (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label="Spawn Hostile Mob Squad [M]"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onSpawnHostileWave();
+              }}
+              className="mc-btn px-2.5 py-2 text-xs font-pixel text-rose-300"
+            >
+              Spawn Mobs [M]
             </button>
           )}
           <button
