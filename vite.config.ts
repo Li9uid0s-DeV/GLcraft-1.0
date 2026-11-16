@@ -4,6 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import {defineConfig} from 'vite';
 
+const ROOT_DIR = import.meta.dirname;
+
 export default defineConfig(() => {
   return {
     base: './',
@@ -20,8 +22,8 @@ export default defineConfig(() => {
           if (error) {
             return;
           }
-          const distDir = path.resolve(__dirname, 'dist');
-          const srcAssets = path.resolve(__dirname, 'src/assets');
+          const distDir = path.resolve(ROOT_DIR, 'dist');
+          const srcAssets = path.resolve(ROOT_DIR, 'src/assets');
           const distAssets = path.resolve(distDir, 'src/assets');
           if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
             fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
@@ -29,7 +31,7 @@ export default defineConfig(() => {
           // Also populate public/gh-pages-bundle.{js,css} so GitHub Pages "Deploy from a branch (main)"
           // works immediately even if the user hasn't switched GitHub Pages source to GitHub Actions.
           const assetsDir = path.resolve(distDir, 'assets');
-          const pubDir = path.resolve(__dirname, 'public');
+          const pubDir = path.resolve(ROOT_DIR, 'public');
           if (fs.existsSync(assetsDir) && fs.existsSync(pubDir)) {
             const files = fs.readdirSync(assetsDir);
             const jsFile = files.find((f) => f.endsWith('.js'));
@@ -47,12 +49,19 @@ export default defineConfig(() => {
               );
             }
           }
+          // Do not ship duplicate gh-pages-bundle.* copies inside dist/ (dist/index.html uses ./assets/*)
+          for (const extra of ['gh-pages-bundle.js', 'gh-pages-bundle.css']) {
+            const p = path.resolve(distDir, extra);
+            if (fs.existsSync(p)) {
+              fs.rmSync(p, {force: true});
+            }
+          }
         },
       },
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(ROOT_DIR, '.'),
       },
     },
     server: {

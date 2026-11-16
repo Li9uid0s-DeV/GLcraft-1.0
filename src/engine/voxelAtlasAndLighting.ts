@@ -631,7 +631,7 @@ export const DISTANT_HORIZONS_ARCHIVE_METADATA = {
   id: 'distanthorizons',
   version: '3.3.4',
   minecraftTarget: '26.3',
-  archiveUrl: '/assets/aistudio/DistantHorizons-3.3.4-26.3-fabric-neoforge_ba3e5c85.zip',
+  archiveUrl: './assets/aistudio/DistantHorizons-3.3.4-26.3-fabric-neoforge_ba3e5c85.zip',
   authors: ['James Seibel', 'Leonardo Amato', 'Cola', 'coolGi', 'Ran', 'Leetom', 'pshsh', 'Karnatour'],
   entrypoints: {
     client: 'com.seibel.distanthorizons.fabric.FabricMain',

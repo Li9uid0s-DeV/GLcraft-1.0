@@ -15,15 +15,15 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
     <script>
       // Automatic fallback when GitHub Pages is set to "Deploy from a branch (main)"
       // and serves the raw repository index.html instead of dist/index.html:
       (function () {
-        var hasRawTsx = !!document.querySelector('script[src*="/src/main.tsx"]');
-        var isStaticPages =
-          location.hostname.endsWith('github.io') || location.protocol === 'file:';
-        if (hasRawTsx && isStaticPages) {
+        var loaded = false;
+        window.__vcLoadStaticFallback = function () {
+          if (loaded) return;
+          if (!document.querySelector('script[src*="/src/main.tsx"]')) return;
+          loaded = true;
           var css = document.createElement('link');
           css.rel = 'stylesheet';
           css.href = './public/gh-pages-bundle.css';
@@ -32,6 +32,20 @@
           js.type = 'module';
           js.src = './public/gh-pages-bundle.js';
           document.body.appendChild(js);
+        };
+      })();
+    </script>
+    <script
+      type="module"
+      src="/src/main.tsx"
+      onerror="window.__vcLoadStaticFallback && window.__vcLoadStaticFallback()"
+    ></script>
+    <script>
+      (function () {
+        var isStaticPages =
+          location.hostname.endsWith('github.io') || location.protocol === 'file:';
+        if (isStaticPages && window.__vcLoadStaticFallback) {
+          window.__vcLoadStaticFallback();
         }
       })();
     </script>

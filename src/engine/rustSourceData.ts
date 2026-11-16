@@ -157,10 +157,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-      - run: npm install
+      - uses: actions/configure-pages@v5
+      - run: npm install --no-audit --no-fund
       - run: |
           npm run build
+          rm -f dist/gh-pages-bundle.js dist/gh-pages-bundle.css
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
       - uses: actions/upload-pages-artifact@v3

@@ -309,32 +309,38 @@ export default function App() {
 
   useEffect(() => {
     setAllBlocks(Array.from(engineRef.current.blocksByNum.values()));
-    // Fetch ./mods/index.json via relative path so GitHub Pages project subpaths (/<repo>/) work seamlessly
-    fetch('./mods/index.json')
-      .then((r) => (r.ok ? r.json() : null))
-      .then(async (manifest) => {
-        if (!manifest?.mods) return;
-        for (const mod of manifest.mods) {
-          if (mod.enabled && Array.isArray(mod.blocks)) {
-            for (const blockPath of mod.blocks) {
-              const relPath = blockPath.startsWith('/') ? `.${blockPath}` : blockPath;
-              const res = await fetch(relPath).catch(() => null);
-              if (res && res.ok) {
-                const text = await res.text();
-                try {
-                  engineRef.current.registerCustomModJson(text);
-                } catch {
-                  // Ignore invalid custom block json
-                }
+    // Fetch ./mods/index.json via relative path so GitHub Pages project subpaths (/<repo>/) work seamlessly,
+    // with automatic fallback to ./public/mods/index.json for "Deploy from a branch (main / root)" mode
+    (async () => {
+      let basePrefix = '';
+      let res = await fetch('./mods/index.json').catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch('./public/mods/index.json').catch(() => null);
+        if (res && res.ok) basePrefix = './public/';
+      }
+      const manifest = res && res.ok ? await res.json().catch(() => null) : null;
+      if (!manifest?.mods) return;
+      for (const mod of manifest.mods) {
+        if (mod.enabled && Array.isArray(mod.blocks)) {
+          for (const blockPath of mod.blocks) {
+            const normalized = blockPath.startsWith('/') ? blockPath.slice(1) : blockPath.replace(/^\.\//, '');
+            const relPath = basePrefix ? `${basePrefix}${normalized}` : `./${normalized}`;
+            const bRes = await fetch(relPath).catch(() => null);
+            if (bRes && bRes.ok) {
+              const text = await bRes.text();
+              try {
+                engineRef.current.registerCustomModJson(text);
+              } catch {
+                // Ignore invalid custom block json
               }
             }
           }
         }
-        setAllBlocks(Array.from(engineRef.current.blocksByNum.values()));
-      })
-      .catch(() => {
-        // Offline or file:// fallback uses pre-registered ModRegistry blocks
-      });
+      }
+      setAllBlocks(Array.from(engineRef.current.blocksByNum.values()));
+    })().catch(() => {
+      // Offline or file:// fallback uses pre-registered ModRegistry blocks
+    });
   }, []);
 
   const showToast = useCallback((msg: string) => {
