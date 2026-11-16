@@ -688,6 +688,121 @@ export const INITIAL_BLOCKS_26_3: BlockDefinition[] = [
     accentHex: '#d9c28c',
     description: 'Reveals nearest 26.3 Dappled Forest & Abandoned Camp coordinates.',
   },
+  // TaCZ (Timeless and Classics Zero) Tactical Firearms & Gun Smith Table
+  {
+    numericId: 270,
+    id: 'tacz:m4a1',
+    name: 'TaCZ M4A1 Carbine (5.56mm)',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'tools',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.22, 0.25, 0.30],
+    colorSide: [0.84, 0.64, 0.32],
+    colorBottom: [0.16, 0.18, 0.22],
+    accentHex: '#d4a359',
+    description: '800 RPM Tactical Carbine. Left-click: Fire, Right-click: Holo Sight ADS, [T]: Reload.',
+  },
+  {
+    numericId: 271,
+    id: 'tacz:ai_awp',
+    name: 'TaCZ AI-AWP Magnum Sniper',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'tools',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.20, 0.34, 0.22],
+    colorSide: [0.18, 0.30, 0.20],
+    colorBottom: [0.12, 0.14, 0.16],
+    accentHex: '#3b6e44',
+    description: '.338 Lapua Bolt-Action Sniper Rifle with 8x Mil-Dot Scope ADS (Right-click).',
+  },
+  {
+    numericId: 272,
+    id: 'tacz:rpg7',
+    name: 'TaCZ RPG-7 Warhead Launcher',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'explosives',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.46, 0.30, 0.18],
+    colorSide: [0.36, 0.24, 0.14],
+    colorBottom: [0.22, 0.24, 0.26],
+    accentHex: '#8c5832',
+    tntRadius: 6,
+    description: 'Fires PG-7V high-explosive anti-tank rockets that carve 3D craters on impact.',
+  },
+  {
+    numericId: 273,
+    id: 'tacz:deagle_golden',
+    name: 'TaCZ Golden Desert Eagle .50 AE',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'tools',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.94, 0.76, 0.22],
+    colorSide: [0.86, 0.68, 0.18],
+    colorBottom: [0.20, 0.22, 0.25],
+    accentHex: '#f0c238',
+    description: '.50 Action Express heavy semi-auto pistol with high stopping power.',
+  },
+  {
+    numericId: 274,
+    id: 'tacz:gun_smith_table',
+    name: 'TaCZ Gun Smith Table',
+    modId: 'tacz',
+    modName: 'TaCZ: Timeless and Classics Zero',
+    category: 'utility',
+    hardness: 2.5,
+    blastResistance: 6.0,
+    properTool: 'pickaxe',
+    opaque: true,
+    lightLevel: 4,
+    colorTop: [0.24, 0.32, 0.42],
+    colorSide: [0.34, 0.40, 0.48],
+    colorBottom: [0.18, 0.20, 0.24],
+    accentHex: '#466280',
+    description: 'Craft & customize TaCZ firearms, optics, suppressors, and ammunition.',
+  },
+  {
+    numericId: 275,
+    id: 'do_a_barrel_roll:flight_thruster',
+    name: 'Do a Barrel Roll Elytra Wing [G]',
+    modId: 'do_a_barrel_roll',
+    modName: 'Do a Barrel Roll (Fabric)',
+    category: 'tools',
+    hardness: 0,
+    blastResistance: 0,
+    properTool: 'any',
+    opaque: false,
+    isItemOnly: true,
+    lightLevel: 0,
+    colorTop: [0.24, 0.74, 0.96],
+    colorSide: [0.18, 0.62, 0.88],
+    colorBottom: [0.12, 0.48, 0.72],
+    accentHex: '#38bdf8',
+    description: 'Right-click or press [G] to toggle 6-DOF Aircraft Roll/Pitch/Yaw Flight & [Z]/[X] 360° Barrel Roll!',
+  },
 ];
 
 export const CRAFTING_RECIPES_26_3: CraftingRecipe[] = [
@@ -754,6 +869,30 @@ export const CRAFTING_RECIPES_26_3: CraftingRecipe[] = [
     pattern: [' R', 'S '],
     key: { R: 'minecraft:redstone_block', S: 'minecraft:stone' },
     modName: 'Mega TNT Pack',
+  },
+  {
+    id: 'tacz:craft_m4a1',
+    resultId: 'tacz:m4a1',
+    resultCount: 1,
+    pattern: ['SSS', 'GR ', 'P  '],
+    key: { S: 'minecraft:stone', G: 'minecraft:gold_ore', R: 'minecraft:redstone_block', P: 'minecraft:poplar_planks' },
+    modName: 'TaCZ: Timeless and Classics Zero',
+  },
+  {
+    id: 'tacz:craft_ai_awp',
+    resultId: 'tacz:ai_awp',
+    resultCount: 1,
+    pattern: ['GGG', 'SR ', 'P  '],
+    key: { G: 'minecraft:gold_ore', S: 'minecraft:stone', R: 'minecraft:redstone_block', P: 'minecraft:poplar_planks' },
+    modName: 'TaCZ: Timeless and Classics Zero',
+  },
+  {
+    id: 'tacz:craft_rpg7',
+    resultId: 'tacz:rpg7',
+    resultCount: 1,
+    pattern: ['TTT', 'SR ', 'P  '],
+    key: { T: 'megatnt:tnt_5x', S: 'minecraft:stone', R: 'minecraft:redstone_block', P: 'minecraft:poplar_planks' },
+    modName: 'TaCZ: Timeless and Classics Zero',
   },
 ];
 
@@ -974,6 +1113,7 @@ export class VoxelEngineCore {
   readonly meshes = new Map<string, ChunkMeshResult>();
   readonly explosionQueue: ExplosionSliceJob[] = [];
   readonly sliceBudgetPerTick = 4096;
+  readonly recipes: CraftingRecipe[] = CRAFTING_RECIPES_26_3;
   oneBlockBrokenCount = 0;
   oneBlockPhaseName = 'Phase 1: Dappled Wilderness';
   readonly undoStack: UndoEntry[] = [];
@@ -1000,29 +1140,46 @@ export class VoxelEngineCore {
     if (!parsed.id || typeof parsed.id !== 'string' || !parsed.id.includes(':')) {
       throw new Error('Block ID must be in namespace:name format (e.g. mymod:ruby_block)');
     }
+    const existing = this.blocksById.get(parsed.id);
     const numericId =
-      typeof parsed.numeric_id === 'number' ? parsed.numeric_id : this.nextCustomNumericId++;
+      existing?.numericId ??
+      (typeof parsed.numeric_id === 'number' ? parsed.numeric_id : this.nextCustomNumericId++);
     const hex: string = parsed.color || parsed.textures?.top || '#ff6d00';
-    const rgb = this.hexToRgb(hex);
+    const rgb = Array.isArray(parsed.colorTop) ? parsed.colorTop : this.hexToRgb(hex);
+    const rgbSide = Array.isArray(parsed.colorSide)
+      ? parsed.colorSide
+      : ([rgb[0] * 0.88, rgb[1] * 0.88, rgb[2] * 0.88] as [number, number, number]);
+    const rgbBottom = Array.isArray(parsed.colorBottom)
+      ? parsed.colorBottom
+      : ([rgb[0] * 0.72, rgb[1] * 0.72, rgb[2] * 0.72] as [number, number, number]);
+    const accentHex =
+      parsed.color ||
+      `#${Math.round(rgb[0] * 255)
+        .toString(16)
+        .padStart(2, '0')}${Math.round(rgb[1] * 255)
+        .toString(16)
+        .padStart(2, '0')}${Math.round(rgb[2] * 255)
+        .toString(16)
+        .padStart(2, '0')}`;
     const def: BlockDefinition = {
       numericId,
       id: parsed.id,
       name: parsed.name || parsed.id,
       modId: parsed.mod_id || parsed.id.split(':')[0],
-      modName: parsed.mod_name || 'User Custom Mod',
+      modName: parsed.mod_name || parsed.modSource || 'User Custom Mod',
       category: parsed.tnt_properties ? 'explosives' : 'building',
       hardness: typeof parsed.hardness === 'number' ? parsed.hardness : 1.2,
       blastResistance: typeof parsed.blast_resistance === 'number' ? parsed.blast_resistance : 4.0,
-      properTool: parsed.proper_tool || 'pickaxe',
-      opaque: parsed.opaque !== false,
+      properTool: parsed.proper_tool || parsed.tool || 'pickaxe',
+      opaque: parsed.transparent ? false : parsed.opaque !== false,
       lightLevel: typeof parsed.light_level === 'number' ? parsed.light_level : 0,
       colorTop: rgb,
-      colorSide: [rgb[0] * 0.88, rgb[1] * 0.88, rgb[2] * 0.88],
-      colorBottom: [rgb[0] * 0.72, rgb[1] * 0.72, rgb[2] * 0.72],
-      accentHex: hex,
+      colorSide: rgbSide,
+      colorBottom: rgbBottom,
+      accentHex,
       tntRadius: parsed.tnt_properties?.blast_radius,
       tntFuseTicks: parsed.tnt_properties?.fuse_ticks,
-      description: parsed.description || 'Registered dynamically via VoxelCraft 26.3 JSON Mod API.',
+      description: parsed.description || 'Registered dynamically via VoxelCraft 26.3 Mod API.',
     };
     this.registerBlock(def);
     return def;
@@ -1151,6 +1308,8 @@ export class VoxelEngineCore {
     return [sr / count, sg / count, sb / count];
   }
 
+  smoothLightingEnabled = true;
+
   computeSurfaceY(wx: number, wz: number): number {
     if (this.dimension === 'minecraft:the_nether') {
       return 56 + Math.floor(this.fbm(wx * 0.03, wz * 0.03, 3) * 14);
@@ -1164,8 +1323,16 @@ export class VoxelEngineCore {
       case 'flat':
         return 64;
       case 'normal': {
-        const n = this.fbm(wx * 0.018, wz * 0.018, 4);
-        return 61 + Math.floor((n - 0.35) * 26);
+        // Multi-octave Continentalness + Erosion + Peaks & Valleys (PV) spline terrain
+        const continental = this.fbm(wx * 0.0085, wz * 0.0085, 4);
+        const erosion = this.fbm(wx * 0.021 + 31.7, wz * 0.021 + 19.3, 3);
+        const detail = this.fbm(wx * 0.048, wz * 0.048, 3);
+        const pvRidge = 1.0 - Math.abs(this.valueNoise(wx * 0.014, wz * 0.014) * 2.0 - 1.0);
+        // Carve natural river channels where pvRidge is very low and continentalness is moderate
+        const riverChannel = Math.max(0, 0.24 - pvRidge) * 24.0;
+        const mountainFactor = Math.max(0, continental - 0.52) * Math.max(0.2, 1.15 - erosion) * 68.0;
+        const baseHills = (continental - 0.36) * 24.0 + (detail - 0.5) * 7.5 + pvRidge * 6.5;
+        return Math.max(54, Math.min(148, Math.floor(62 + baseHills + mountainFactor - riverChannel)));
       }
       case 'amplified': {
         const n = this.fbm(wx * 0.022, wz * 0.022, 5);
@@ -1248,51 +1415,75 @@ export class VoxelEngineCore {
         chunk.biomes[lz * 16 + lx] = biome;
 
         const surfY = this.computeSurfaceY(wx, wz);
+        // Compute local terrain slope for authentic exposed stone/cobblestone cliff faces
+        const hNorth = this.computeSurfaceY(wx, wz - 1);
+        const hEast = this.computeSurfaceY(wx + 1, wz);
+        const slope = Math.max(Math.abs(surfY - hNorth), Math.abs(surfY - hEast));
+
         chunk.setBlock(lx, 0, lz, 5); // Bedrock at Y=-64
 
-        const minFillY = Math.max(MIN_Y + 1, surfY - 12);
+        const minFillY = Math.max(MIN_Y + 1, surfY - 14);
         for (let wy = minFillY; wy <= surfY; wy++) {
           const ly = wy - MIN_Y;
           let blockId = 1; // Stone
           if (wy === surfY) {
             if (this.worldType !== 'flat' && wy <= 62) {
-              blockId = 7; // Sand beach
-            } else if (wy >= 128) {
-              blockId = 10; // Snow peak
+              blockId = 7; // Sand beach & riverbeds
+            } else if (wy >= 112) {
+              blockId = slope >= 3 ? 1 : 10; // Exposed cliff stone or Alpine snow peak
+            } else if (this.worldType !== 'flat' && slope >= 3 && wy >= 70) {
+              blockId = (wx + wy + wz) % 4 === 0 ? 4 : 1; // Exposed rocky cliff face
             } else if (biome === 2) {
               blockId = 20; // 26.3 Dappled Forest Grass
             } else {
               blockId = 2; // Standard Grass
             }
           } else if (wy >= surfY - 3) {
-            blockId = 3; // Dirt
+            blockId = slope >= 3 ? 1 : wy <= 62 ? 7 : 3; // Stone under cliffs, Sand under beaches, Dirt under grass
+          } else {
+            // Subsurface ore veins (Gold Ore 31, Redstone 35)
+            const oreHash = ((wx * 73856093) ^ (wy * 19349663) ^ (wz * 83492791)) >>> 0;
+            if (oreHash % 97 === 0) blockId = 31;
+            else if (oreHash % 131 === 0) blockId = 35;
           }
           chunk.setBlock(lx, ly, lz, blockId);
         }
 
-        // Fill ocean/lake water up to Y=62
+        // Fill ocean/river/lake water up to Y=62
         if (this.worldType !== 'flat' && surfY < 62) {
           for (let wy = surfY + 1; wy <= 62; wy++) {
             chunk.setBlock(lx, wy - MIN_Y, lz, 6);
           }
         }
 
-        // Trees, Poplar Trees & Red Shrubs in Dappled Forest / Forest
-        if (this.worldType !== 'flat' && surfY > 63 && surfY < 118 && lx >= 2 && lx <= 13 && lz >= 2 && lz <= 13) {
+        // Authentic Trees, Poplar Groves, Boulders & Wild Shrubs in Dappled Forest / Forest
+        if (
+          this.worldType !== 'flat' &&
+          surfY > 62 &&
+          surfY < 108 &&
+          slope <= 2 &&
+          lx >= 2 &&
+          lx <= 13 &&
+          lz >= 2 &&
+          lz <= 13
+        ) {
           // Keep a clear spawn path near (0, z) so player never spawns facing a wall
           if (Math.abs(wx) > 4 || Math.abs(wz) > 6) {
             const treeRng = this.hash2d(wx * 3, wz * 3);
-            if (treeRng > 0.972) {
+            if (treeRng > 0.968) {
               this.placeTree(chunk, lx, surfY + 1, lz, biome === 2);
-            } else if (biome === 2 && treeRng > 0.945 && treeRng <= 0.955) {
+            } else if (biome === 2 && treeRng > 0.942 && treeRng <= 0.954) {
               chunk.setBlock(lx, surfY + 1 - MIN_Y, lz, 26); // Red Shrub
+            } else if (treeRng > 0.935 && treeRng <= 0.938) {
+              // Mossy forest boulder
+              chunk.setBlock(lx, surfY + 1 - MIN_Y, lz, 4);
             }
           }
         }
       }
     }
 
-    // Generate 26.3 "Abandoned Camp" landmark in chunk (0, -1) right in front of spawn vista!
+    // Generate 26.3 "Abandoned Camp" + TaCZ Gun Smith Station in chunk (0, -1) right in front of spawn vista!
     if (cx === 0 && cz === -1 && this.worldType !== 'flat') {
       const campX = 8;
       const campZ = 6;
@@ -1304,10 +1495,11 @@ export class VoxelEngineCore {
         }
         // Bracket fungus on fallen log
         chunk.setBlock(campX - 2, campY + 2 - MIN_Y, campZ, 27);
-        // Straw Bed + Amber Cushion + Camp Chest + Demo Mega TNT x5
+        // Straw Bed + Amber Cushion + Camp Chest + TaCZ Gun Smith Table (274) + Demo Mega TNT x5
         chunk.setBlock(campX + 2, campY + 1 - MIN_Y, campZ + 1, 28);
         chunk.setBlock(campX + 1, campY + 1 - MIN_Y, campZ + 2, 29);
         chunk.setBlock(campX - 1, campY + 1 - MIN_Y, campZ + 2, 32);
+        chunk.setBlock(campX - 2, campY + 1 - MIN_Y, campZ + 2, 274); // TaCZ Gun Smith Table
         chunk.setBlock(campX + 3, campY + 1 - MIN_Y, campZ - 1, 60); // TNT x5 ready to test!
       }
     }
@@ -1319,7 +1511,7 @@ export class VoxelEngineCore {
   private placeTree(chunk: ChunkColumn, lx: number, baseWy: number, lz: number, isPoplar: boolean): void {
     const logId = isPoplar ? 21 : 8;
     const leafId = isPoplar ? [23, 24, 25][(lx + lz) % 3] : 9;
-    const trunkH = isPoplar ? 6 : 4;
+    const trunkH = isPoplar ? 6 + ((lx + lz) % 2) : 5;
 
     for (let h = 0; h < trunkH; h++) {
       chunk.setBlock(lx, baseWy + h - MIN_Y, lz, logId);
@@ -1328,11 +1520,18 @@ export class VoxelEngineCore {
       chunk.setBlock(lx + 1, baseWy + 1 - MIN_Y, lz, 27); // Bracket fungus on Poplar trunk
     }
 
-    for (let dy = trunkH - 2; dy <= trunkH + 1; dy++) {
-      const rad = dy === trunkH + 1 ? 1 : 2;
+    // Fuller multi-layered Minecraft tree crown with rounded corner culling
+    for (let dy = trunkH - 3; dy <= trunkH + 1; dy++) {
+      const isTopCrown = dy >= trunkH;
+      const rad = isTopCrown ? 1 : 2;
       for (let dx = -rad; dx <= rad; dx++) {
         for (let dz = -rad; dz <= rad; dz++) {
-          if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+          if (rad === 2 && Math.abs(dx) === 2 && Math.abs(dz) === 2 && (dy === trunkH - 3 || dy === trunkH - 1)) {
+            continue;
+          }
+          if (isTopCrown && dy === trunkH + 1 && Math.abs(dx) === 1 && Math.abs(dz) === 1) {
+            continue;
+          }
           if (dx === 0 && dz === 0 && dy < trunkH) continue;
           const tx = lx + dx;
           const tz = lz + dz;
@@ -1441,8 +1640,61 @@ export class VoxelEngineCore {
     return pools[phase][brokenCount % 5];
   }
 
+  private isAoOccluderFast(chunk: ChunkColumn, lx: number, ly: number, lz: number, wx: number, wy: number, wz: number): number {
+    let id = 0;
+    if (lx >= 0 && lx < 16 && lz >= 0 && lz < 16 && ly >= 0 && ly < CHUNK_HEIGHT) {
+      id = chunk.getBlock(lx, ly, lz);
+    } else if (ly >= 0 && ly < CHUNK_HEIGHT) {
+      id = this.getBlock(wx, wy, wz);
+    }
+    return id !== 0 && id !== 6 ? 1 : 0;
+  }
+
   /**
-   * Builds separated Opaque and Water Float32Array geometry buffers with face culling and Biome Blend.
+   * Computes authentic 4-level Minecraft Per-Vertex Ambient Occlusion (Smooth Lighting) for a corner `c` on face `f`.
+   */
+  private computeCornerAO(
+    chunk: ChunkColumn,
+    lx: number,
+    ly: number,
+    lz: number,
+    wx: number,
+    wy: number,
+    wz: number,
+    f: number,
+    c: [number, number, number]
+  ): number {
+    if (!this.smoothLightingEnabled) return 1.0;
+    const sx = c[0] === 1 ? 1 : -1;
+    const sy = c[1] === 1 ? 1 : -1;
+    const sz = c[2] === 1 ? 1 : -1;
+
+    let s1 = 0;
+    let s2 = 0;
+    let corner = 0;
+    if (f === 0 || f === 1) {
+      const dy = f === 0 ? 1 : -1;
+      s1 = this.isAoOccluderFast(chunk, lx + sx, ly + dy, lz, wx + sx, wy + dy, wz);
+      s2 = this.isAoOccluderFast(chunk, lx, ly + dy, lz + sz, wx, wy + dy, wz + sz);
+      corner = s1 && s2 ? 1 : this.isAoOccluderFast(chunk, lx + sx, ly + dy, lz + sz, wx + sx, wy + dy, wz + sz);
+    } else if (f === 2 || f === 3) {
+      const dx = f === 2 ? 1 : -1;
+      s1 = this.isAoOccluderFast(chunk, lx + dx, ly + sy, lz, wx + dx, wy + sy, wz);
+      s2 = this.isAoOccluderFast(chunk, lx + dx, ly, lz + sz, wx + dx, wy, wz + sz);
+      corner = s1 && s2 ? 1 : this.isAoOccluderFast(chunk, lx + dx, ly + sy, lz + sz, wx + dx, wy + sy, wz + sz);
+    } else {
+      const dz = f === 4 ? 1 : -1;
+      s1 = this.isAoOccluderFast(chunk, lx + sx, ly, lz + dz, wx + sx, wy, wz + dz);
+      s2 = this.isAoOccluderFast(chunk, lx, ly + sy, lz + dz, wx, wy + sy, wz + dz);
+      corner = s1 && s2 ? 1 : this.isAoOccluderFast(chunk, lx + sx, ly + sy, lz + dz, wx + sx, wy + sy, wz + dz);
+    }
+    const occ = s1 + s2 + corner; // 0..3
+    return 1.0 - occ * 0.145;
+  }
+
+  /**
+   * Builds separated Opaque and Water Float32Array geometry buffers with Sodium-style Face Culling,
+   * 4-level Per-Vertex Ambient Occlusion (Smooth Lighting), and Biome Blend.
    */
   buildChunkMesh(cx: number, cz: number): ChunkMeshResult {
     const key = VoxelEngineCore.chunkKey(cx, cz);
@@ -1503,9 +1755,9 @@ export class VoxelEngineCore {
               const triOrder = [0, 1, 2, 0, 2, 3];
               // Subtle deterministic per-block brightness variation for visual depth
               const microShade = 0.96 + ((wx * 19 + wy * 31 + wz * 13) & 7) * 0.01;
-              const r = Math.min(1, col[0] * face.shade * microShade);
-              const g = Math.min(1, col[1] * face.shade * microShade);
-              const b = Math.min(1, col[2] * face.shade * microShade);
+              const baseR = col[0] * face.shade * microShade;
+              const baseG = col[1] * face.shade * microShade;
+              const baseB = col[2] * face.shade * microShade;
 
               if (def.isLiquid) {
                 for (let i = 0; i < 6; i++) {
@@ -1513,16 +1765,28 @@ export class VoxelEngineCore {
                   const c = face.corners[ci];
                   wPos.push(wx + c[0], wy + c[1] - 0.12, wz + c[2]);
                   wNorm.push(face.dx, face.dy, face.dz);
-                  wCol.push(r, g, b);
+                  wCol.push(Math.min(1, baseR), Math.min(1, baseG), Math.min(1, baseB));
                 }
               } else {
+                // Precompute 4 corner Ambient Occlusion values for smooth lighting across the quad
+                const cornerAos = [
+                  this.computeCornerAO(chunk, lx, ly, lz, wx, wy, wz, f, face.corners[0]),
+                  this.computeCornerAO(chunk, lx, ly, lz, wx, wy, wz, f, face.corners[1]),
+                  this.computeCornerAO(chunk, lx, ly, lz, wx, wy, wz, f, face.corners[2]),
+                  this.computeCornerAO(chunk, lx, ly, lz, wx, wy, wz, f, face.corners[3]),
+                ];
                 for (let i = 0; i < 6; i++) {
                   const ci = triOrder[i];
                   const c = face.corners[ci];
                   const uv = face.uvs[ci];
+                  const ao = cornerAos[ci];
                   oPos.push(wx + c[0], wy + c[1], wz + c[2]);
                   oNorm.push(face.dx, face.dy, face.dz);
-                  oCol.push(r, g, b);
+                  oCol.push(
+                    Math.min(1, baseR * ao),
+                    Math.min(1, baseG * ao),
+                    Math.min(1, baseB * ao)
+                  );
                   oUv.push(uv[0], uv[1]);
                 }
               }

@@ -1,6 +1,8 @@
 /**
- * Weather2 Remastered - 3D Volumetric Cloud Advection, Wind Vector Physics & Multi-Disaster Engine
- * Provides pure deterministic math for CPU storm cell tracking + GPU GLSL volumetric shader uniforms.
+ * Weather2 Remastered & ProtoManly's Weather (PMWeather) Engine
+ * - 3D Volumetric Cumulonimbus / Supercell Cloud Density & Wall Cloud Modeling
+ * - Global Wind Vector + Local Cyclonic Wind Field (Tangential Swirl, Radial Inflow, Vertical Updraft)
+ * - 9 Distinct Disasters with Real-time Advection & Environment Debris Coupling
  */
 
 export type WeatherDisasterType =
@@ -21,129 +23,168 @@ export interface WeatherDisasterMeta {
   windSpeedRange: [number, number]; // m/s
   cloudCoverage: number; // 0.0 .. 1.0
   cloudDarkness: number; // 0.0 .. 1.0
+  anvilHeight: number; // ProtoManly's Weather cumulonimbus vertical thickness
+  wallCloudLowering: number; // Mesocyclone wall cloud drop (blocks)
   fogColorHex: number;
   fogDensity: number;
   vortexRadius: number; // 0 if no funnel
   vortexSuctionStrength: number;
+  vortexSwirlGain: number; // Multiplier for uVortexSwirl uniform
   precipitationType: 'none' | 'rain' | 'hail' | 'sand' | 'meteor';
+}
+
+export interface LocalWindFieldSample {
+  vx: number;
+  vy: number;
+  vz: number;
+  localSpeed: number;
+  stormProximity: number; // 0.0 (far) .. 1.0 (at disaster core)
+  swirlIntensity: number;
 }
 
 export const WEATHER2_DISASTERS: Record<WeatherDisasterType, WeatherDisasterMeta> = {
   clear: {
     id: 'clear',
-    label: 'Clear Cumulus',
-    jpLabel: '晴天（積雲）',
-    windSpeedRange: [3, 7],
-    cloudCoverage: 0.36,
-    cloudDarkness: 0.12,
+    label: 'Clear Cumulus (PMWeather)',
+    jpLabel: '晴天（立体積雲）',
+    windSpeedRange: [3.5, 7.5],
+    cloudCoverage: 0.42,
+    cloudDarkness: 0.14,
+    anvilHeight: 18,
+    wallCloudLowering: 0,
     fogColorHex: 0x6ba8e5,
-    fogDensity: 0.009,
+    fogDensity: 0.008,
     vortexRadius: 0,
     vortexSuctionStrength: 0,
+    vortexSwirlGain: 0.08,
     precipitationType: 'none',
   },
   rain: {
     id: 'rain',
     label: 'Heavy Rainstorm',
-    jpLabel: '暴風雨',
-    windSpeedRange: [11, 16],
-    cloudCoverage: 0.72,
-    cloudDarkness: 0.55,
+    jpLabel: '暴風雨（乱層雲）',
+    windSpeedRange: [12, 18],
+    cloudCoverage: 0.74,
+    cloudDarkness: 0.56,
+    anvilHeight: 32,
+    wallCloudLowering: 4,
     fogColorHex: 0x4b5d73,
-    fogDensity: 0.016,
+    fogDensity: 0.015,
     vortexRadius: 0,
     vortexSuctionStrength: 0,
+    vortexSwirlGain: 0.25,
     precipitationType: 'rain',
   },
   thunder: {
     id: 'thunder',
-    label: 'Supercell Lightning',
-    jpLabel: 'スーパーセル雷雨',
-    windSpeedRange: [16, 23],
-    cloudCoverage: 0.84,
-    cloudDarkness: 0.76,
+    label: 'PMWeather Supercell',
+    jpLabel: 'スーパーセル巨大積乱雲',
+    windSpeedRange: [18, 26],
+    cloudCoverage: 0.86,
+    cloudDarkness: 0.78,
+    anvilHeight: 48,
+    wallCloudLowering: 9,
     fogColorHex: 0x2f3b4c,
-    fogDensity: 0.02,
+    fogDensity: 0.019,
     vortexRadius: 0,
-    vortexSuctionStrength: 0,
+    vortexSuctionStrength: 3.5,
+    vortexSwirlGain: 0.65,
     precipitationType: 'rain',
   },
   hailstorm: {
     id: 'hailstorm',
-    label: 'Severe Hailstorm',
-    jpLabel: '巨大雹嵐（ひょう嵐）',
-    windSpeedRange: [18, 26],
-    cloudCoverage: 0.86,
-    cloudDarkness: 0.68,
+    label: 'Severe Hail Mesocyclone',
+    jpLabel: '巨大雹嵐（メソサイクロン）',
+    windSpeedRange: [20, 29],
+    cloudCoverage: 0.88,
+    cloudDarkness: 0.72,
+    anvilHeight: 46,
+    wallCloudLowering: 8,
     fogColorHex: 0x4c5f6e,
-    fogDensity: 0.022,
+    fogDensity: 0.021,
     vortexRadius: 0,
-    vortexSuctionStrength: 0,
+    vortexSuctionStrength: 4.0,
+    vortexSwirlGain: 0.58,
     precipitationType: 'hail',
   },
   sandstorm: {
     id: 'sandstorm',
-    label: 'Haboob Sandstorm',
-    jpLabel: '巨大砂嵐（ハブーブ）',
-    windSpeedRange: [24, 34],
+    label: 'Haboob Sandstorm Wall',
+    jpLabel: '巨大砂嵐（ハブーブ砂壁）',
+    windSpeedRange: [26, 38],
     cloudCoverage: 0.92,
-    cloudDarkness: 0.62,
+    cloudDarkness: 0.64,
+    anvilHeight: 38,
+    wallCloudLowering: 12,
     fogColorHex: 0xb87d3e,
-    fogDensity: 0.032,
+    fogDensity: 0.03,
     vortexRadius: 0,
-    vortexSuctionStrength: 0,
+    vortexSuctionStrength: 5.0,
+    vortexSwirlGain: 0.45,
     precipitationType: 'sand',
   },
   tornado_f1: {
     id: 'tornado_f1',
-    label: 'EF1 Rope Tornado',
-    jpLabel: 'EF1 ロープ竜巻',
-    windSpeedRange: [28, 38],
-    cloudCoverage: 0.82,
-    cloudDarkness: 0.75,
+    label: 'EF1 Rope Tornado & Wall Cloud',
+    jpLabel: 'EF1 ロープ竜巻＆壁雲',
+    windSpeedRange: [30, 42],
+    cloudCoverage: 0.85,
+    cloudDarkness: 0.78,
+    anvilHeight: 50,
+    wallCloudLowering: 13,
     fogColorHex: 0x3b4754,
     fogDensity: 0.019,
-    vortexRadius: 5.5,
-    vortexSuctionStrength: 7.5,
+    vortexRadius: 6.0,
+    vortexSuctionStrength: 9.0,
+    vortexSwirlGain: 1.15,
     precipitationType: 'rain',
   },
   tornado_f5: {
     id: 'tornado_f5',
-    label: 'EF5 Wedge Tornado',
+    label: 'EF5 Wedge Supercell Tornado',
     jpLabel: 'EF5 超巨大ウェッジ竜巻',
-    windSpeedRange: [45, 68],
-    cloudCoverage: 0.95,
-    cloudDarkness: 0.92,
-    fogColorHex: 0x222930,
-    fogDensity: 0.026,
-    vortexRadius: 12.5,
-    vortexSuctionStrength: 16.0,
+    windSpeedRange: [48, 72],
+    cloudCoverage: 0.96,
+    cloudDarkness: 0.93,
+    anvilHeight: 62,
+    wallCloudLowering: 18,
+    fogColorHex: 0x1e252d,
+    fogDensity: 0.025,
+    vortexRadius: 13.5,
+    vortexSuctionStrength: 18.5,
+    vortexSwirlGain: 1.85,
     precipitationType: 'rain',
   },
   hurricane: {
     id: 'hurricane',
-    label: 'Cat-5 Hurricane / Typhoon',
+    label: 'Cat-5 Eyewall Hurricane',
     jpLabel: 'カテゴリー5 超大型ハリケーン',
-    windSpeedRange: [38, 55],
-    cloudCoverage: 0.94,
-    cloudDarkness: 0.85,
-    fogColorHex: 0x283845,
-    fogDensity: 0.028,
-    vortexRadius: 9.5,
-    vortexSuctionStrength: 11.5,
+    windSpeedRange: [42, 60],
+    cloudCoverage: 0.95,
+    cloudDarkness: 0.86,
+    anvilHeight: 58,
+    wallCloudLowering: 15,
+    fogColorHex: 0x263644,
+    fogDensity: 0.026,
+    vortexRadius: 10.5,
+    vortexSuctionStrength: 13.5,
+    vortexSwirlGain: 1.55,
     precipitationType: 'rain',
   },
   meteor_shower: {
     id: 'meteor_shower',
-    label: 'Apocalyptic Firestorm',
-    jpLabel: '隕石嵐（ファイアストーム）',
-    windSpeedRange: [15, 25],
-    cloudCoverage: 0.78,
-    cloudDarkness: 0.82,
+    label: 'Apocalyptic Pyrocumulonimbus',
+    jpLabel: '隕石嵐（火災積乱雲）',
+    windSpeedRange: [18, 28],
+    cloudCoverage: 0.82,
+    cloudDarkness: 0.84,
+    anvilHeight: 52,
+    wallCloudLowering: 10,
     fogColorHex: 0x4a231b,
     fogDensity: 0.021,
     vortexRadius: 0,
-    vortexSuctionStrength: 0,
+    vortexSuctionStrength: 4.5,
+    vortexSwirlGain: 0.75,
     precipitationType: 'meteor',
   },
 };
@@ -153,9 +194,9 @@ export const WEATHER2_DISASTER_LIST: WeatherDisasterMeta[] = Object.values(WEATH
 export class Weather2Simulation {
   activeDisaster: WeatherDisasterType = 'clear';
   windAngleRad = 0.55; // Wind blowing direction in radians
-  windSpeed = 5.2; // m/s
+  windSpeed = 5.5; // m/s
   windOffset = { x: 0, y: 0, z: 0 }; // Cumulative 3D cloud advection offset
-  stormCenter = { x: -16, z: -20 };
+  stormCenter = { x: -14, z: -18 };
   lightningFlash = 0;
 
   setDisaster(disaster: WeatherDisasterType): void {
@@ -171,6 +212,85 @@ export class Weather2Simulation {
     return { vx, vz, speed: this.windSpeed, compassDeg };
   }
 
+  /**
+   * Computes the dynamic `vortexSwirl` uniform value from the current `windVec` and disaster metadata.
+   */
+  computeVortexSwirl(windVec = this.getWindVector()): number {
+    const meta = WEATHER2_DISASTERS[this.activeDisaster];
+    const normalizedWind = Math.min(2.2, windVec.speed / 28.0);
+    return meta.vortexSwirlGain * (0.45 + 0.55 * normalizedWind);
+  }
+
+  /**
+   * Evaluates the local 3D wind vector field at `(wx, wy, wz)`, combining global wind advection
+   * with cyclonic tangential swirl, inward radial suction, and vertical updraft near `stormCenter`.
+   */
+  sampleLocalWindField(wx: number, wy: number, wz: number): LocalWindFieldSample {
+    const meta = WEATHER2_DISASTERS[this.activeDisaster];
+    const globalWind = this.getWindVector();
+    const dx = wx - this.stormCenter.x;
+    const dz = wz - this.stormCenter.z;
+    const dist = Math.hypot(dx, dz);
+
+    const influenceRadius = Math.max(28, meta.vortexRadius * 4.2 + 22);
+    const stormProximity = Math.max(0, Math.min(1, 1 - dist / influenceRadius));
+    const swirlIntensity = this.computeVortexSwirl(globalWind) * stormProximity;
+
+    let vx = globalWind.vx;
+    let vy = 0;
+    let vz = globalWind.vz;
+
+    let vortexSpeedContrib = 0;
+    if (stormProximity > 0.001 && dist > 0.05) {
+      const nx = dx / dist;
+      const nz = dz / dist;
+      // Counter-clockwise tangential vector (-nz, nx)
+      const tx = -nz;
+      const tz = nx;
+
+      // Rankine-like vortex tangential speed peaks near vortexRadius
+      const coreR = Math.max(3.5, meta.vortexRadius || 7.0);
+      const rankineProfile =
+        dist < coreR * 0.5
+          ? Math.max(0.7, dist / (coreR * 0.5))
+          : Math.min(1.0, coreR / Math.max(coreR, dist * 0.65));
+      const tangentialSpeed =
+        (globalWind.speed * 1.05 + meta.vortexSuctionStrength * 2.2) *
+        rankineProfile *
+        stormProximity;
+
+      // Inward radial inflow near surface, outward anvil divergence above Y=115
+      const altitudeDivergence = wy > 115 ? 0.35 : -0.65;
+      const radialSpeed =
+        (meta.vortexSuctionStrength * 0.65 + globalWind.speed * 0.15) *
+        stormProximity *
+        altitudeDivergence;
+
+      const dvx = tx * tangentialSpeed + nx * radialSpeed;
+      const dvz = tz * tangentialSpeed + nz * radialSpeed;
+      vx += dvx;
+      vz += dvz;
+
+      // Strong mesocyclone updraft near the disaster core
+      const updraftStrength =
+        meta.vortexRadius > 0
+          ? meta.vortexSuctionStrength * 1.15
+          : globalWind.speed * 0.22 * meta.vortexSwirlGain;
+      vy = updraftStrength * Math.pow(stormProximity, 1.25);
+      vortexSpeedContrib = Math.hypot(dvx, vy, dvz);
+    }
+
+    const localSpeed = Math.max(Math.hypot(vx, vy, vz), globalWind.speed + vortexSpeedContrib * 0.75);
+    return {
+      vx,
+      vy,
+      vz,
+      localSpeed,
+      stormProximity,
+      swirlIntensity,
+    };
+  }
+
   step(dt: number, elapsedSec: number): void {
     const meta = WEATHER2_DISASTERS[this.activeDisaster];
     // Smoothly vary wind angle and speed within disaster's physical envelope
@@ -182,9 +302,9 @@ export class Weather2Simulation {
 
     const { vx, vz } = this.getWindVector();
     // Advect 3D volumetric cloud coordinates along the live wind vector
-    this.windOffset.x += vx * dt * 0.45;
-    this.windOffset.z += vz * dt * 0.45;
-    this.windOffset.y = Math.sin(elapsedSec * 0.2) * 1.5;
+    this.windOffset.x += vx * dt * 0.48;
+    this.windOffset.z += vz * dt * 0.48;
+    this.windOffset.y = Math.sin(elapsedSec * 0.24) * 1.6;
 
     // Move storm cell / tornado center along wind vector bounded around playable arena
     this.stormCenter.x += vx * dt * 0.22;
@@ -233,27 +353,50 @@ export class Weather2Simulation {
   }
 
   /**
-   * Evaluates 3D volumetric FBM cloud density (0.0 .. 1.0) at world coordinates `(wx, wy, wz)`,
-   * advected by `windOffset` and boosted near the active storm cell center.
+   * Evaluates ProtoManly's Weather (PMWeather) 3D volumetric cumulonimbus & supercell cloud density (0.0 .. 1.0)
+   * at world coordinates `(wx, wy, wz)`, including wind advection, upper-level anvil shear, and wall cloud lowering.
    */
   sampleVolumetricCloudDensity(wx: number, wy: number, wz: number): number {
     const meta = WEATHER2_DISASTERS[this.activeDisaster];
-    const sx = (wx - this.windOffset.x) * 0.018;
-    const sy = (wy - this.windOffset.y) * 0.045;
-    const sz = (wz - this.windOffset.z) * 0.018;
+    const windVec = this.getWindVector();
+    const dxStorm = wx - this.stormCenter.x;
+    const dzStorm = wz - this.stormCenter.z;
+    const distToStorm = Math.hypot(dxStorm, dzStorm);
+
+    // Mesocyclone spiral coordinate twist near stormCenter
+    const swirl = this.computeVortexSwirl(windVec);
+    let sampleX = wx - this.windOffset.x;
+    let sampleZ = wz - this.windOffset.z;
+    if (swirl > 0.1 && distToStorm < 85) {
+      const twistAngle = (1 - distToStorm / 85) * swirl * 1.85;
+      const cosA = Math.cos(twistAngle);
+      const sinA = Math.sin(twistAngle);
+      const rx = dxStorm * cosA - dzStorm * sinA;
+      const rz = dxStorm * sinA + dzStorm * cosA;
+      sampleX = this.stormCenter.x + rx - this.windOffset.x;
+      sampleZ = this.stormCenter.z + rz - this.windOffset.z;
+    }
+
+    // Upper-level anvil wind shear (clouds tilt downwind with altitude like PMWeather supercells)
+    const altitudeAboveBase = Math.max(0, wy - 104);
+    sampleX -= (windVec.vx * altitudeAboveBase) * 0.04;
+    sampleZ -= (windVec.vz * altitudeAboveBase) * 0.04;
+
+    const sx = sampleX * 0.019;
+    const sy = (wy - this.windOffset.y) * 0.042;
+    const sz = sampleZ * 0.019;
 
     let fbm = 0;
     let amp = 0.55;
     let freq = 1.0;
     for (let i = 0; i < 4; i++) {
       fbm += this.noise3D(sx * freq, sy * freq, sz * freq) * amp;
-      freq *= 2.02;
+      freq *= 2.03;
       amp *= 0.5;
     }
 
-    // Storm cell proximity wall boost
-    const distToStorm = Math.hypot(wx - this.stormCenter.x, wz - this.stormCenter.z);
-    const stormWallBoost = Math.max(0, 1 - distToStorm / 45) * 0.28;
+    // Supercell wall cloud & anvil boost near storm center
+    const stormWallBoost = Math.max(0, 1 - distToStorm / 52) * (0.24 + swirl * 0.12);
     const threshold = 1.0 - meta.cloudCoverage;
     const raw = (fbm + stormWallBoost - threshold) / Math.max(0.15, meta.cloudCoverage);
     return Math.max(0, Math.min(1, raw));

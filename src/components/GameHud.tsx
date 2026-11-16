@@ -5,6 +5,7 @@ import {
   WEATHER2_DISASTERS,
   WEATHER2_DISASTER_LIST,
 } from '../engine/weather2System';
+import { getTaczGunByNumericId } from '../engine/taczGunEngine';
 
 export interface JadeTargetInfo {
   block: BlockDefinition;
@@ -53,6 +54,22 @@ interface GameHudProps {
   blastFlashIntensity: number;
   enhancedVisuals: boolean;
   lastToast: string | null;
+  activeShaderPackName?: string;
+  onOpenShadersAndMods?: () => void;
+  onOpenSodiumSettings?: () => void;
+  // TaCZ Firearms & Do a Barrel Roll Flight HUD props
+  taczAmmo?: number;
+  taczMaxAmmo?: number;
+  taczReloading?: boolean;
+  taczAdsActive?: boolean;
+  onTaczFire?: () => void;
+  onTaczReload?: () => void;
+  barrelRollEnabled?: boolean;
+  barrelRollAngleDeg?: number;
+  pitchAngleDeg?: number;
+  onToggleBarrelRollFlight?: () => void;
+  onTrigger360BarrelRoll?: () => void;
+  onReplayChunkFadeIn?: () => void;
 }
 
 export const GameHud: React.FC<GameHudProps> = ({
@@ -90,9 +107,25 @@ export const GameHud: React.FC<GameHudProps> = ({
   blastFlashIntensity,
   enhancedVisuals,
   lastToast,
+  activeShaderPackName,
+  onOpenShadersAndMods,
+  onOpenSodiumSettings,
+  taczAmmo = 30,
+  taczMaxAmmo = 30,
+  taczReloading = false,
+  taczAdsActive = false,
+  onTaczFire,
+  onTaczReload,
+  barrelRollEnabled = false,
+  barrelRollAngleDeg = 0,
+  pitchAngleDeg = 0,
+  onToggleBarrelRollFlight,
+  onTrigger360BarrelRoll,
+  onReplayChunkFadeIn,
 }) => {
   const [dockCollapsed, setDockCollapsed] = useState(false);
   const activeBlock = getBlockDef(hotbarIds[selectedSlot]);
+  const activeTaczGun = activeBlock ? getTaczGunByNumericId(activeBlock.numericId) : undefined;
   const disasterMeta = WEATHER2_DISASTERS[weatherState];
 
   return (
@@ -131,24 +164,55 @@ export const GameHud: React.FC<GameHudProps> = ({
         />
       )}
 
-      {/* Center Crosshair */}
+      {/* Center Crosshair / TaCZ Holographic & Sniper Scope ADS Reticle / Do a Barrel Roll Horizon */}
       <div
         aria-hidden="true"
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
       >
-        <svg viewBox="0 0 24 24" className="w-6 h-6">
-          <path
-            d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7V4z"
-            fill="#ffffff"
-            stroke="#111111"
-            strokeWidth="1.2"
-          />
-        </svg>
+        {activeTaczGun && taczAdsActive ? (
+          activeTaczGun.defaultOptic === 'sniper_8x' ? (
+            /* 8x Mil-Dot Sniper Scope Overlay */
+            <div className="relative w-72 h-72 rounded-full border-4 border-black/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.68)] flex items-center justify-center">
+              <div className="absolute inset-x-0 h-[1.5px] bg-emerald-400/80" />
+              <div className="absolute inset-y-0 w-[1.5px] bg-emerald-400/80" />
+              <div className="w-3 h-3 rounded-full border border-red-500 bg-red-500/40" />
+            </div>
+          ) : (
+            /* EOTech Holographic Red Circle-Dot Sight Overlay */
+            <div className="relative w-28 h-24 rounded-lg border-2 border-slate-700/80 bg-cyan-950/15 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full border-2 border-rose-500/90 flex items-center justify-center shadow-[0_0_8px_rgba(244,63,94,0.8)]">
+                <div className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+              </div>
+            </div>
+          )
+        ) : (
+          <svg viewBox="0 0 24 24" className="w-6 h-6">
+            <path
+              d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7V4z"
+              fill={activeTaczGun ? '#f59e0b' : '#ffffff'}
+              stroke="#111111"
+              strokeWidth="1.2"
+            />
+          </svg>
+        )}
+
+        {/* Do a Barrel Roll Artificial Horizon Ladder when Flight Roll is Active */}
+        {barrelRollEnabled && (
+          <div
+            className="absolute w-44 h-44 pointer-events-none flex items-center justify-center"
+            style={{ transform: `rotate(${-barrelRollAngleDeg}deg)` }}
+          >
+            <div className="w-32 h-[2px] bg-sky-400/70 flex justify-between">
+              <span className="w-3 h-2 border-t-2 border-l-2 border-sky-300" />
+              <span className="w-3 h-2 border-t-2 border-r-2 border-sky-300" />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Top Row: Left World & Weather2 Wind Telemetry · Center Jade HUD · Right Action Buttons */}
+      {/* Top Row: Left World & Sodium/Weather Telemetry · Center Jade HUD · Right Action Buttons */}
       <div className="w-full flex items-start justify-between gap-4">
-        {/* Top-Left Compact World Coordinates, Wind Vector & 3D Cloud Density */}
+        {/* Top-Left Compact World Coordinates, Sodium Stack, Weather & Shader Status */}
         <div className="mc-panel px-3 py-2 text-xs font-mono-tabular flex flex-col gap-0.5 pointer-events-auto">
           <div className="text-amber-300 font-pixel">
             XYZ: {Math.round(playerPos[0])} / {Math.round(playerPos[1])} / {Math.round(playerPos[2])}
@@ -159,21 +223,28 @@ export const GameHud: React.FC<GameHudProps> = ({
             <span className="text-emerald-300">{dimension.replace('minecraft:', '')}</span>
           </div>
           <div className="text-cyan-300">
-            <span>Weather2: {disasterMeta.jpLabel}</span>
+            <span>Weather: {disasterMeta.jpLabel}</span>
             <span className="mx-1.5" aria-hidden="true">·</span>
             <span>
               Wind {Math.round(windTelemetry.speed)}m/s ({windTelemetry.compassDeg}°)
             </span>
           </div>
-          <div className="text-slate-300">
-            <span>3D Cloud Density: {windTelemetry.cloudDensityPct}%</span>
-            {tornadoDistance !== null && (
-              <>
-                <span className="mx-1.5" aria-hidden="true">·</span>
-                <span className="text-rose-300">Vortex {Math.round(tornadoDistance)}m</span>
-              </>
-            )}
+          <div className="text-emerald-300 text-[11px]">
+            Sodium + Lithium + ModernFix + ImmediatelyFast + Indium: ON
           </div>
+          {barrelRollEnabled && (
+            <div className="text-sky-300 font-pixel text-[11px]">
+              Do a Barrel Roll: BANK {barrelRollAngleDeg >= 0 ? `+${barrelRollAngleDeg}` : barrelRollAngleDeg}° · PITCH {pitchAngleDeg}°
+            </div>
+          )}
+          {activeShaderPackName && (
+            <div className="text-amber-200 truncate max-w-[260px]">
+              Shader: {activeShaderPackName}
+            </div>
+          )}
+          {tornadoDistance !== null && (
+            <div className="text-rose-300">Vortex Distance: {Math.round(tornadoDistance)}m</div>
+          )}
           {oneBlockPhaseName && <div className="text-amber-200">{oneBlockPhaseName}</div>}
           {multiplayerStatus !== 'offline' && (
             <div className="text-emerald-400">Net: {multiplayerStatus}</div>
@@ -223,8 +294,52 @@ export const GameHud: React.FC<GameHudProps> = ({
           </div>
         )}
 
-        {/* Top-Right Compact Square Utility Icon Buttons */}
-        <div className="flex items-center gap-2 pointer-events-auto">
+        {/* Top-Right Compact Utility Action Buttons */}
+        <div className="flex flex-wrap items-center justify-end gap-1.5 pointer-events-auto">
+          {onOpenSodiumSettings && (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label="Open Sodium Video and Optimization Settings [O]"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onOpenSodiumSettings();
+              }}
+              className="mc-btn px-2.5 py-2 text-xs font-pixel text-emerald-300"
+            >
+              Sodium [O]
+            </button>
+          )}
+          {onOpenShadersAndMods && (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label="Open Java Shaders and Mods Manager [K]"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onOpenShadersAndMods();
+              }}
+              className="mc-btn px-2.5 py-2 text-xs font-pixel text-amber-300"
+            >
+              Shaders &amp; Mods [K]
+            </button>
+          )}
+          {onToggleBarrelRollFlight && (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label="Toggle Do a Barrel Roll Flight [G]"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onToggleBarrelRollFlight();
+              }}
+              className={`mc-btn px-2.5 py-2 text-xs font-pixel ${
+                barrelRollEnabled ? 'mc-btn-primary text-sky-200' : 'text-sky-300'
+              }`}
+            >
+              Barrel Roll [G]
+            </button>
+          )}
           <button
             type="button"
             tabIndex={-1}
@@ -233,7 +348,7 @@ export const GameHud: React.FC<GameHudProps> = ({
               e.currentTarget.blur();
               onOpenInventory();
             }}
-            className="mc-btn px-3 py-2 text-xs font-pixel"
+            className="mc-btn px-2.5 py-2 text-xs font-pixel"
           >
             Inv &amp; JEI [E]
           </button>
@@ -245,7 +360,7 @@ export const GameHud: React.FC<GameHudProps> = ({
               e.currentTarget.blur();
               onOpenCommand();
             }}
-            className="mc-btn px-3 py-2 text-xs font-pixel"
+            className="mc-btn px-2.5 py-2 text-xs font-pixel"
           >
             Cmd [/]
           </button>
@@ -257,7 +372,7 @@ export const GameHud: React.FC<GameHudProps> = ({
               e.currentTarget.blur();
               onToggleAxiom();
             }}
-            className={`mc-btn px-3 py-2 text-xs font-pixel ${axiomMode ? 'mc-btn-primary' : ''}`}
+            className={`mc-btn px-2.5 py-2 text-xs font-pixel ${axiomMode ? 'mc-btn-primary' : ''}`}
           >
             Axiom [R]
           </button>
@@ -269,18 +384,80 @@ export const GameHud: React.FC<GameHudProps> = ({
               e.currentTarget.blur();
               onOpenPause();
             }}
-            className="mc-btn px-3 py-2 text-xs font-pixel"
+            className="mc-btn px-2.5 py-2 text-xs font-pixel"
           >
             Pause [P]
           </button>
         </div>
       </div>
 
-      {/* Bottom Area: Toast Notification + Survival Bars + 9-Slot Hotbar + Collapsible Builder Dock */}
+      {/* Bottom Area: Toast + TaCZ Firearm HUD / Barrel Roll Controls + Survival Bars + 9-Slot Hotbar + Dock */}
       <div className="w-full flex flex-col items-center gap-2">
         {lastToast && (
           <div className="mc-panel px-4 py-1.5 text-xs font-mono-tabular text-amber-300">
             {lastToast}
+          </div>
+        )}
+
+        {/* TaCZ Active Firearm Tactical Ballistics Bar */}
+        {activeTaczGun && (
+          <div
+            aria-label="TaCZ Tactical Firearm HUD"
+            className="mc-panel px-4 py-1.5 flex items-center gap-4 text-xs pointer-events-auto border border-amber-400/70"
+          >
+            <span className="font-pixel text-amber-300">{activeTaczGun.name}</span>
+            <span className="font-mono-tabular text-emerald-300 font-bold">
+              {taczReloading ? 'RELOADING...' : `AMMO: ${taczAmmo} / ${taczMaxAmmo}`}
+            </span>
+            <span className="text-slate-300 font-mono text-[11px]">
+              {activeTaczGun.caliber} · {activeTaczGun.fireMode}
+            </span>
+            {onTaczFire && (
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={(e) => {
+                  e.currentTarget.blur();
+                  onTaczFire();
+                }}
+                className="mc-btn px-2.5 py-0.5 text-[11px] font-pixel text-amber-300"
+              >
+                FIRE [L-Click]
+              </button>
+            )}
+            {onTaczReload && (
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={(e) => {
+                  e.currentTarget.blur();
+                  onTaczReload();
+                }}
+                className="mc-btn px-2.5 py-0.5 text-[11px] font-pixel text-cyan-300"
+              >
+                Reload [T]
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Do a Barrel Roll Quick Maneuver Bar when Flight is Enabled */}
+        {barrelRollEnabled && onTrigger360BarrelRoll && (
+          <div className="mc-panel px-3 py-1 flex items-center gap-3 text-xs pointer-events-auto border border-sky-400/70">
+            <span className="font-pixel text-sky-300">
+              Do a Barrel Roll Flight Active (Roll: {barrelRollAngleDeg}°)
+            </span>
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onTrigger360BarrelRoll();
+              }}
+              className="mc-btn px-2.5 py-0.5 text-[11px] font-pixel text-sky-200"
+            >
+              360° Barrel Roll! [Z / X]
+            </button>
           </div>
         )}
 
@@ -348,6 +525,7 @@ export const GameHud: React.FC<GameHudProps> = ({
           {hotbarIds.map((id, idx) => {
             const def = getBlockDef(id);
             const active = selectedSlot === idx;
+            const gunSpec = def ? getTaczGunByNumericId(def.numericId) : undefined;
             return (
               <button
                 key={idx}
@@ -370,7 +548,13 @@ export const GameHud: React.FC<GameHudProps> = ({
                     className="w-6 h-6 border border-black/80 shadow-sm flex items-center justify-center text-[9px] font-pixel text-white"
                     style={{ backgroundColor: def.accentHex }}
                   >
-                    {def.tntRadius ? `${def.id.replace('megatnt:tnt_', '').toUpperCase()}` : ''}
+                    {gunSpec
+                      ? 'GUN'
+                      : def.id === 'do_a_barrel_roll:flight_thruster'
+                      ? 'FLY'
+                      : def.tntRadius
+                      ? `${def.id.replace('megatnt:tnt_', '').toUpperCase()}`
+                      : ''}
                   </div>
                 )}
               </button>
@@ -394,6 +578,19 @@ export const GameHud: React.FC<GameHudProps> = ({
 
           {!dockCollapsed && (
             <div className="mc-panel px-3 py-2 flex flex-wrap items-center justify-center gap-2 text-xs">
+              {onReplayChunkFadeIn && (
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={(e) => {
+                    e.currentTarget.blur();
+                    onReplayChunkFadeIn();
+                  }}
+                  className="mc-btn px-2.5 py-1 text-xs font-pixel text-emerald-300"
+                >
+                  Chunk Fade-In
+                </button>
+              )}
               <button
                 type="button"
                 tabIndex={-1}
@@ -404,28 +601,6 @@ export const GameHud: React.FC<GameHudProps> = ({
                 className="mc-btn px-2.5 py-1 text-xs font-pixel text-amber-200"
               >
                 Detonate TNT x5
-              </button>
-              <button
-                type="button"
-                tabIndex={-1}
-                onClick={(e) => {
-                  e.currentTarget.blur();
-                  onQuickDetonateMegaTnt('megatnt:tnt_10x');
-                }}
-                className="mc-btn px-2.5 py-1 text-xs font-pixel text-amber-300"
-              >
-                Detonate TNT x10
-              </button>
-              <button
-                type="button"
-                tabIndex={-1}
-                onClick={(e) => {
-                  e.currentTarget.blur();
-                  onQuickDetonateMegaTnt('megatnt:tnt_50x');
-                }}
-                className="mc-btn px-2.5 py-1 text-xs font-pixel text-purple-200"
-              >
-                Detonate TNT x50
               </button>
               <button
                 type="button"
@@ -443,7 +618,7 @@ export const GameHud: React.FC<GameHudProps> = ({
 
               <label className="flex items-center gap-1.5">
                 <span className="font-pixel text-[11px] text-cyan-300 whitespace-nowrap">
-                  Weather2:
+                  Weather:
                 </span>
                 <select
                   aria-label="Select Weather2 Disaster"

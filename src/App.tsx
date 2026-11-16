@@ -23,6 +23,20 @@ import {
   CommandConsoleModal,
   PauseModal,
 } from './components/GameModals';
+import {
+  BUILTIN_JAVA_SHADER_PACKS,
+  type JavaShaderPackProfile,
+} from './engine/javaShaderPackEngine';
+import type { LoadedJavaModSummary } from './engine/javaModLoaderEngine';
+import { JavaShadersAndModsModal } from './components/JavaShadersAndModsModal';
+import {
+  DEFAULT_BARREL_ROLL_CONFIG,
+  DEFAULT_SODIUM_OPTIMIZATION_SETTINGS,
+  getTaczGunByNumericId,
+  type DoABarrelRollConfig,
+  type SodiumOptimizationSettings,
+  type TaczAttachmentLoadout,
+} from './engine/taczGunEngine';
 
 interface DebrisParticle {
   active: boolean;
@@ -85,7 +99,12 @@ export default function App() {
     return 'title';
   });
 
-  const [activeModal, setActiveModal] = useState<'none' | 'inventory' | 'command' | 'pause'>('none');
+  const [activeModal, setActiveModal] = useState<
+    'none' | 'inventory' | 'command' | 'pause' | 'shaders_mods'
+  >('none');
+  const [shadersModsInitialTab, setShadersModsInitialTab] = useState<
+    'shaders' | 'mods' | 'sodium' | 'tacz_flight'
+  >('sodium');
   const [worldName, setWorldName] = useState('Wilderness Bound 26.3');
   const [worldSeed, setWorldSeed] = useState('26032026');
   const [worldType, setWorldType] = useState<WorldTypeId>('normal');
@@ -104,7 +123,7 @@ export default function App() {
     waterWaves: true,
     cameraOverhaul: true,
     enhancedVisuals: true,
-    weather2Tornado: true,
+    weather2Tornado: false, // Always start worlds in Clear (Sunny) weather!
     soundPhysics: true,
     masterVolume: 0.8,
     voiceChatPttKey: 'V',
@@ -113,17 +132,29 @@ export default function App() {
     customSkinDataUrl: null,
   });
 
-  // Hotbar initialized with 26.3 Wilderness Bound + Mega TNT Pack + WorldEdit Wand
+  const [sodiumSettings, setSodiumSettings] = useState<SodiumOptimizationSettings>(
+    DEFAULT_SODIUM_OPTIMIZATION_SETTINGS
+  );
+  const [barrelRollConfig, setBarrelRollConfig] = useState<DoABarrelRollConfig>(
+    DEFAULT_BARREL_ROLL_CONFIG
+  );
+  const [taczLoadout, setTaczLoadout] = useState<TaczAttachmentLoadout>({
+    optic: 'eotech_holo',
+    muzzle: 'standard',
+    extendedMag: false,
+  });
+
+  // Hotbar initialized with 26.3 Wilderness Bound + TaCZ Firearms + Do a Barrel Roll + Mega TNT + WorldEdit
   const [hotbarIds, setHotbarIds] = useState<number[]>([
-    20, // Dappled Forest Grass
-    21, // Poplar Log
-    22, // Poplar Planks
-    28, // Straw Camp Bed
-    60, // Mega TNT x5
-    61, // Mega TNT x10
-    63, // Mega TNT x100
-    260, // Blast Igniter
-    261, // WorldEdit Wand (//wand)
+    20, // 1: Dappled Forest Grass
+    21, // 2: Poplar Log
+    270, // 3: TaCZ M4A1 Carbine (5.56mm)
+    271, // 4: TaCZ AI-AWP Magnum Sniper
+    272, // 5: TaCZ RPG-7 Warhead Launcher
+    275, // 6: Do a Barrel Roll Elytra Wing [G]
+    60, // 7: Mega TNT x5
+    63, // 8: Mega TNT x100
+    261, // 9: WorldEdit Wand (//wand)
   ]);
   const [selectedSlot, setSelectedSlot] = useState(0);
   const [allBlocks, setAllBlocks] = useState<BlockDefinition[]>([]);
@@ -137,11 +168,12 @@ export default function App() {
   const [health, setHealth] = useState(20);
   const [hunger] = useState(20);
   const [xpLevel] = useState(26);
-  const [weatherState, setWeatherState] = useState<WeatherDisasterType>('tornado_f5');
+  // World generation ALWAYS starts in Clear ('clear' = 晴天) weather!
+  const [weatherState, setWeatherState] = useState<WeatherDisasterType>('clear');
   const [windTelemetry, setWindTelemetry] = useState({
-    speed: 48,
-    compassDeg: 32,
-    cloudDensityPct: 86,
+    speed: 4,
+    compassDeg: 45,
+    cloudDensityPct: 34,
   });
   const [tornadoDistHud, setTornadoDistHud] = useState<number | null>(null);
   const [axiomMode, setAxiomMode] = useState(false);
@@ -154,8 +186,21 @@ export default function App() {
   const [blastFlashHud, setBlastFlashHud] = useState(0);
   const [lastToast, setLastToast] = useState<string | null>(null);
   const [commandLog, setCommandLog] = useState<string[]>([
-    '[VoxelCraft 26.3] Ready. Type /weather tornado_f5, /weather hurricane, /weather sandstorm, or //set.',
+    '[VoxelCraft 26.3] Ready. Sodium + Lithium + ModernFix + ImmediatelyFast + Indium + TaCZ + Do a Barrel Roll active. Press [O] for Sodium or [K] for Mods/Shaders.',
   ]);
+  const [shaderPacks, setShaderPacks] = useState<JavaShaderPackProfile[]>(BUILTIN_JAVA_SHADER_PACKS);
+  const [activeShaderPack, setActiveShaderPack] = useState<JavaShaderPackProfile>(
+    BUILTIN_JAVA_SHADER_PACKS[0]
+  );
+  const [loadedJavaMods, setLoadedJavaMods] = useState<LoadedJavaModSummary[]>([]);
+
+  // TaCZ & Do a Barrel Roll live HUD state
+  const [taczAmmoHud, setTaczAmmoHud] = useState(30);
+  const [taczMaxAmmoHud, setTaczMaxAmmoHud] = useState(30);
+  const [taczReloadingHud, setTaczReloadingHud] = useState(false);
+  const [taczAdsHud, setTaczAdsHud] = useState(false);
+  const [barrelRollDegHud, setBarrelRollDegHud] = useState(0);
+  const [pitchDegHud, setPitchDegHud] = useState(0);
 
   // Mutable engine refs decoupled from React 60Hz loop
   const engineRef = useRef<VoxelEngineCore>(new VoxelEngineCore(26032026, 'normal', 5));
@@ -166,6 +211,9 @@ export default function App() {
   const gameStateRef = useRef(gameState);
   const activeModalRef = useRef(activeModal);
   const settingsRef = useRef(settings);
+  const sodiumSettingsRef = useRef(sodiumSettings);
+  const barrelRollConfigRef = useRef(barrelRollConfig);
+  const taczLoadoutRef = useRef(taczLoadout);
   const hotbarRef = useRef(hotbarIds);
   const selectedSlotRef = useRef(selectedSlot);
   const gameModeRef = useRef(gameMode);
@@ -173,7 +221,8 @@ export default function App() {
   const axiomSymmetryRef = useRef(axiomSymmetry);
   const wePos1Ref = useRef<[number, number, number] | null>(null);
   const wePos2Ref = useRef<[number, number, number] | null>(null);
-  const weatherStateRef = useRef(weatherState);
+  const weatherStateRef = useRef<WeatherDisasterType>('clear');
+  const activeShaderPackRef = useRef<JavaShaderPackProfile>(activeShaderPack);
 
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -189,11 +238,33 @@ export default function App() {
     audioRef.current.masterVolume = settings.masterVolume;
     audioRef.current.soundPhysicsEnabled = settings.soundPhysics;
     engineRef.current.biomeBlendSize = settings.biomeBlend;
+    engineRef.current.smoothLightingEnabled = settings.smoothLighting;
   }, [settings]);
 
   useEffect(() => {
+    sodiumSettingsRef.current = sodiumSettings;
+  }, [sodiumSettings]);
+
+  useEffect(() => {
+    barrelRollConfigRef.current = barrelRollConfig;
+  }, [barrelRollConfig]);
+
+  useEffect(() => {
+    taczLoadoutRef.current = taczLoadout;
+  }, [taczLoadout]);
+
+  useEffect(() => {
     hotbarRef.current = hotbarIds;
-  }, [hotbarIds]);
+    const equippedId = hotbarIds[selectedSlot];
+    const gun = getTaczGunByNumericId(equippedId);
+    if (gun) {
+      const cap = taczLoadoutRef.current.extendedMag
+        ? Math.round(gun.magCapacity * 1.5)
+        : gun.magCapacity;
+      setTaczMaxAmmoHud(cap);
+      setTaczAmmoHud(cap);
+    }
+  }, [hotbarIds, selectedSlot]);
 
   useEffect(() => {
     selectedSlotRef.current = selectedSlot;
@@ -251,8 +322,12 @@ export default function App() {
   }, []);
 
   // Scene & Mesh synchronization callbacks stored in refs
-  const rebuildChunkThreeMeshRef = useRef<(cx: number, cz: number) => void>(() => {});
+  const rebuildChunkThreeMeshRef = useRef<(cx: number, cz: number, isInitialSpawn?: boolean) => void>(() => {});
   const clearAllThreeChunksRef = useRef<() => void>(() => {});
+  const replayChunkFadeInRef = useRef<() => void>(() => {});
+  const fireTaczWeaponRef = useRef<() => void>(() => {});
+  const reloadTaczWeaponRef = useRef<() => void>(() => {});
+  const trigger360BarrelRollRef = useRef<() => void>(() => {});
   const spawnDebrisBurstRef = useRef<
     (x: number, y: number, z: number, col: [number, number, number], count: number) => void
   >(() => {});
@@ -266,10 +341,11 @@ export default function App() {
   const updateMaterialSettingsRef = useRef<() => void>(() => {});
 
   useEffect(() => {
+    activeShaderPackRef.current = activeShaderPack;
     updateMaterialSettingsRef.current();
-  }, [settings.renderMode, settings.textureResolution, settings.fov]);
+  }, [activeShaderPack, settings.renderMode, settings.textureResolution, settings.fov]);
 
-  // Start or regenerate world around spawn
+  // Start or regenerate world around spawn (ALWAYS in Clear / Sunny weather!)
   const startWorldSession = useCallback(
     (overrideType?: WorldTypeId, overrideDim?: DimensionId) => {
       const targetType = overrideType ?? worldType;
@@ -278,6 +354,11 @@ export default function App() {
         parseInt(worldSeed.replace(/\D/g, ''), 10) ||
         worldSeed.split('').reduce((acc, c) => acc * 31 + c.charCodeAt(0), 7);
 
+      // Guarantee Clear (晴天) weather on every world generation
+      setWeatherState('clear');
+      weatherStateRef.current = 'clear';
+      weather2Ref.current.setDisaster('clear');
+
       clearAllThreeChunksRef.current();
       const eng = engineRef.current;
       eng.releaseAllMemory();
@@ -285,6 +366,7 @@ export default function App() {
       eng.worldType = targetType;
       eng.dimension = targetDim;
       eng.biomeBlendSize = settingsRef.current.biomeBlend;
+      eng.smoothLightingEnabled = settingsRef.current.smoothLighting;
 
       const rad = Math.min(3, Math.max(2, settingsRef.current.renderDistance));
       const radiusToBuild =
@@ -299,7 +381,7 @@ export default function App() {
       }
       for (let cx = -radiusToBuild; cx <= radiusToBuild; cx++) {
         for (let cz = -radiusToBuild; cz <= radiusToBuild; cz++) {
-          rebuildChunkThreeMeshRef.current(cx, cz);
+          rebuildChunkThreeMeshRef.current(cx, cz, true);
         }
       }
 
@@ -318,7 +400,7 @@ export default function App() {
       setGameState('playing');
       document.body.dataset.state = 'playing';
       showToast(
-        `World "${worldName}" started · Mode: ${targetType.toUpperCase()} · ${eng.chunks.size} chunks meshed`
+        `World "${worldName}" started (Weather: Clear 晴天) · Sodium Smooth Chunk Fade-In Active · ${eng.chunks.size} chunks meshed`
       );
     },
     [worldType, dimension, worldSeed, worldName, showToast]
@@ -697,35 +779,61 @@ export default function App() {
       side: THREE.DoubleSide,
     });
 
-    // Extend Opaque Material with GLSL Ray-Traced Sun Bounce & Specular GI when in `raytracing` mode
+    // Extend Opaque Material with GLSL Java Shader Pack (Iris/OptiFine) PBR Specular, GI & Foliage Sway
     const rtUniforms = {
       uRenderMode: { value: 1 }, // 0=normal, 1=pbr, 2=raytracing
       uTime: { value: 0 },
       uSunDir: { value: new THREE.Vector3(0.45, 0.85, 0.35).normalize() },
+      uWindVec: { value: new THREE.Vector2(3.5, 2.0) },
+      uStormCenter: { value: new THREE.Vector2(-14, -18) },
+      uPackSpecularWetness: { value: 0.68 },
+      uPackEmissiveBloom: { value: 0.85 },
+      uPackFoliageAmp: { value: 1.15 },
+      uPackSaturation: { value: 1.14 },
+      uSunlightTint: { value: new THREE.Vector3(1.0, 0.93, 0.8) },
     };
 
     opaqueMaterial.onBeforeCompile = (shader) => {
       shader.uniforms.uRenderMode = rtUniforms.uRenderMode;
       shader.uniforms.uTime = rtUniforms.uTime;
       shader.uniforms.uSunDir = rtUniforms.uSunDir;
+      shader.uniforms.uWindVec = rtUniforms.uWindVec;
+      shader.uniforms.uStormCenter = rtUniforms.uStormCenter;
+      shader.uniforms.uPackSpecularWetness = rtUniforms.uPackSpecularWetness;
+      shader.uniforms.uPackEmissiveBloom = rtUniforms.uPackEmissiveBloom;
+      shader.uniforms.uPackFoliageAmp = rtUniforms.uPackFoliageAmp;
+      shader.uniforms.uPackSaturation = rtUniforms.uPackSaturation;
+      shader.uniforms.uSunlightTint = rtUniforms.uSunlightTint;
       shader.vertexShader =
-        `varying vec3 vWorldPos;\nvarying vec3 vWorldNorm;\n` +
+        `uniform float uTime;\nuniform vec2 uWindVec;\nuniform vec2 uStormCenter;\nuniform float uPackFoliageAmp;\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNorm;\n` +
         shader.vertexShader.replace(
           '#include <worldpos_vertex>',
-          `#include <worldpos_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWorldNorm = normalize(mat3(modelMatrix) * objectNormal);`
+          `#include <worldpos_vertex>
+          vec4 wpInit = modelMatrix * vec4(transformed, 1.0);
+          // Foliage & grass blocks respond to local Weather2 wind vector, storm proximity & Java Shader Pack WAVING_FOLIAGE
+          if (color.g > color.r * 1.08 && color.g > color.b * 1.15) {
+            float stormDist = length(wpInit.xz - uStormCenter);
+            float stormBoost = 1.0 + smoothstep(48.0, 4.0, stormDist) * 2.2;
+            float gust = sin(uTime * 3.6 + wpInit.x * 0.7 + wpInit.z * 0.7) * 0.5 + 0.5;
+            vec2 sway = uWindVec * 0.0028 * uPackFoliageAmp * stormBoost * (0.4 + 0.6 * gust);
+            transformed.x += clamp(sway.x, -0.22, 0.22);
+            transformed.z += clamp(sway.y, -0.22, 0.22);
+          }
+          vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+          vWorldNorm = normalize(mat3(modelMatrix) * objectNormal);`
         );
       shader.fragmentShader =
-        `uniform int uRenderMode;\nuniform float uTime;\nuniform vec3 uSunDir;\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNorm;\n` +
+        `uniform int uRenderMode;\nuniform float uTime;\nuniform vec3 uSunDir;\nuniform float uPackSpecularWetness;\nuniform float uPackEmissiveBloom;\nuniform float uPackSaturation;\nuniform vec3 uSunlightTint;\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNorm;\n` +
         shader.fragmentShader.replace(
           '#include <dithering_fragment>',
           `#include <dithering_fragment>
-          if (uRenderMode == 2) {
-            vec3 viewDir = normalize(cameraPosition - vWorldPos);
-            vec3 refl = reflect(-viewDir, normalize(vWorldNorm));
-            float sunSpec = pow(max(dot(refl, uSunDir), 0.0), 24.0);
-            float bounceGi = 0.18 * max(0.0, dot(vWorldNorm, vec3(0.0, 1.0, 0.0)));
-            gl_FragColor.rgb += vec3(1.0, 0.92, 0.76) * sunSpec * 0.42 + vec3(0.22, 0.38, 0.55) * bounceGi;
-          }`
+          vec3 viewDir = normalize(cameraPosition - vWorldPos);
+          vec3 refl = reflect(-viewDir, normalize(vWorldNorm));
+          float sunSpec = pow(max(dot(refl, uSunDir), 0.0), 28.0) * uPackSpecularWetness;
+          float bounceGi = 0.22 * uPackEmissiveBloom * max(0.0, dot(vWorldNorm, vec3(0.0, 1.0, 0.0)));
+          gl_FragColor.rgb += uSunlightTint * sunSpec * 0.48 + vec3(0.24, 0.40, 0.58) * bounceGi;
+          float luma = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
+          gl_FragColor.rgb = clamp(mix(vec3(luma), gl_FragColor.rgb, uPackSaturation), 0.0, 1.0);`
         );
     };
 
@@ -785,11 +893,30 @@ export default function App() {
 
     updateMaterialSettingsRef.current = () => {
       const s = settingsRef.current;
+      const pack = activeShaderPackRef.current;
       camera.fov = s.fov;
       camera.updateProjectionMatrix();
       rtUniforms.uRenderMode.value =
         s.renderMode === 'normal' ? 0 : s.renderMode === 'pbr' ? 1 : 2;
-      opaqueMaterial.roughness = s.renderMode === 'normal' ? 0.92 : 0.62;
+      opaqueMaterial.roughness = Math.max(0.25, 0.92 - pack.specularWetness * 0.45);
+
+      // Apply Java Shader Pack optical & physical uniforms (`sunPathRotation`, PBR wetness, GI bounce, saturation)
+      const rotRad = (pack.sunPathRotation * Math.PI) / 180;
+      const sx = 45 * Math.cos(rotRad) - 35 * Math.sin(rotRad);
+      const sz = 45 * Math.sin(rotRad) + 35 * Math.cos(rotRad);
+      sunLight.position.set(sx, 95, sz);
+      sunLight.color.setRGB(...pack.sunlightTint);
+      hemiLight.color.setRGB(...pack.skyZenithTint);
+      hemiLight.groundColor.setRGB(...pack.ambientTint);
+      renderer.toneMappingExposure = pack.exposure;
+
+      rtUniforms.uSunDir.value.set(sx, 95, sz).normalize();
+      rtUniforms.uPackSpecularWetness.value = pack.specularWetness;
+      rtUniforms.uPackEmissiveBloom.value = pack.emissiveBloomStrength;
+      rtUniforms.uPackFoliageAmp.value = pack.wavingFoliageAmp;
+      rtUniforms.uPackSaturation.value = pack.saturation;
+      rtUniforms.uSunlightTint.value.set(...pack.sunlightTint);
+      waterMaterial.opacity = Math.max(0.55, 0.92 - pack.waterClarity * 0.2);
 
       const updatedTex = generateVoxelMaterialTextures(s.textureResolution, maxAniso, isSoftwareGl);
       texPack.albedoMap.dispose();
@@ -928,13 +1055,16 @@ export default function App() {
       }
     };
 
-    // 3D Procedural Volumetric Cloud Layer (Raymarched 3D Noise FBM + Wind Vector Advection + Storm Anvil)
+    // ProtoManly's Weather (PMWeather) 3D Volumetric Supercell & Cumulonimbus Cloud Layer
     const cloudUniforms = {
       uTime: { value: 0 },
       uWindOffset: { value: new THREE.Vector3(0, 0, 0) },
-      uStormCenter: { value: new THREE.Vector2(-16, -20) },
+      uWindVec: { value: new THREE.Vector2(4.0, 2.0) },
+      uStormCenter: { value: new THREE.Vector2(-14, -18) },
       uCloudCoverage: { value: 0.72 },
       uCloudDarkness: { value: 0.55 },
+      uAnvilHeight: { value: 38.0 },
+      uWallCloudLowering: { value: 8.0 },
       uVortexSwirl: { value: 1.0 },
       uLightningFlash: { value: 0.0 },
     };
@@ -945,11 +1075,18 @@ export default function App() {
       depthWrite: false,
       side: THREE.DoubleSide,
       vertexShader: `
+        uniform vec2 uStormCenter;
+        uniform float uWallCloudLowering;
+        uniform float uVortexSwirl;
         varying vec3 vWorldPos;
         varying vec2 vUv;
         void main() {
           vUv = uv;
           vec4 wp = modelMatrix * vec4(position, 1.0);
+          // ProtoManly's Weather Mesocyclone Wall Cloud & Shelf Cloud physical lowering near storm core
+          float stormDist = length(wp.xz - uStormCenter);
+          float wallDrop = smoothstep(54.0, 6.0, stormDist) * uWallCloudLowering * clamp(uVortexSwirl, 0.2, 1.8);
+          wp.y -= wallDrop;
           vWorldPos = wp.xyz;
           gl_Position = projectionMatrix * viewMatrix * wp;
         }
@@ -957,9 +1094,11 @@ export default function App() {
       fragmentShader: `
         uniform float uTime;
         uniform vec3 uWindOffset;
+        uniform vec2 uWindVec;
         uniform vec2 uStormCenter;
         uniform float uCloudCoverage;
         uniform float uCloudDarkness;
+        uniform float uAnvilHeight;
         uniform float uVortexSwirl;
         uniform float uLightningFlash;
         varying vec3 vWorldPos;
@@ -986,10 +1125,10 @@ export default function App() {
 
         float fbm3(vec3 p) {
           float v = 0.0;
-          float a = 0.52;
+          float a = 0.54;
           for (int i = 0; i < 4; i++) {
             v += a * noise3(p);
-            p = p * 2.04 + vec3(13.1, 7.7, 5.3);
+            p = p * 2.03 + vec3(13.1, 7.7, 5.3);
             a *= 0.5;
           }
           return v;
@@ -999,65 +1138,132 @@ export default function App() {
           vec2 relStorm = vWorldPos.xz - uStormCenter;
           float stormDist = length(relStorm);
 
-          // Spiral eyewall distortion when tornado / hurricane vortex is active
+          // ProtoManly's Weather Mesocyclone Spiral Eyewall & Inflow Band Distortion
           vec2 sampleXZ = vWorldPos.xz - uWindOffset.xz;
-          if (uVortexSwirl > 0.1 && stormDist < 95.0) {
-            float angle = atan(relStorm.y, relStorm.x) + (1.0 - stormDist / 95.0) * uVortexSwirl * 2.6;
+          if (uVortexSwirl > 0.05 && stormDist < 115.0) {
+            float proximity = 1.0 - stormDist / 115.0;
+            float angle = atan(relStorm.y, relStorm.x) + proximity * proximity * uVortexSwirl * 3.1;
             sampleXZ = uStormCenter + vec2(cos(angle), sin(angle)) * stormDist - uWindOffset.xz;
           }
 
-          // Raymarch 5 volumetric altitude steps through the 3D cloud slab
+          // Quantize XZ slightly to give ProtoManly's Weather signature 3D blocky-volumetric supercell shelves
+          vec2 voxelizedXZ = mix(sampleXZ, floor(sampleXZ / 3.5) * 3.5, 0.45);
+
+          // Raymarch 7 volumetric altitude steps through the cumulonimbus / anvil column
           float accumDensity = 0.0;
           float accumLight = 0.0;
-          for (int s = 0; s < 5; s++) {
-            float hFrac = float(s) / 4.0;
-            vec3 samplePos = vec3(sampleXZ * 0.022, hFrac * 2.2 + uWindOffset.y * 0.15);
+          for (int s = 0; s < 7; s++) {
+            float hFrac = float(s) / 6.0;
+            // Downwind anvil wind shear at upper altitudes
+            vec2 anvilShear = uWindVec * hFrac * (uAnvilHeight * 0.018);
+            vec3 samplePos = vec3((voxelizedXZ - anvilShear) * 0.021, hFrac * 2.6 + uWindOffset.y * 0.14);
             float n = fbm3(samplePos);
-            float stormWall = smoothstep(75.0, 8.0, stormDist) * 0.25 * uVortexSwirl;
+
+            // Mesocyclone Wall Cloud & Shelf Cloud feeder band boost
+            float wallCloudRing = smoothstep(82.0, 10.0, stormDist) * 0.28 * clamp(uVortexSwirl, 0.25, 1.8);
+            float anvilSpread = (hFrac > 0.65) ? smoothstep(125.0, 20.0, stormDist) * 0.18 * uVortexSwirl : 0.0;
             float thresh = 1.0 - uCloudCoverage;
-            float d = clamp((n + stormWall - thresh) / max(0.18, uCloudCoverage), 0.0, 1.0);
-            accumDensity += d * 0.26;
-            accumLight += d * (0.35 + hFrac * 0.65);
+            float rawD = clamp((n + wallCloudRing + anvilSpread - thresh) / max(0.16, uCloudCoverage), 0.0, 1.0);
+            // Stepped PMWeather volumetric layer stratification
+            float steppedD = mix(rawD, floor(rawD * 5.0 + 0.5) / 5.0, 0.42);
+            accumDensity += steppedD * 0.22;
+            accumLight += steppedD * (0.25 + hFrac * 0.75);
           }
 
-          float alpha = clamp(accumDensity, 0.0, 0.92);
-          // Fade out softly toward distant horizon edge
-          float edgeFade = smoothstep(220.0, 65.0, length(vWorldPos.xz - cameraPosition.xz));
+          float alpha = clamp(accumDensity, 0.0, 0.95);
+          float edgeFade = smoothstep(235.0, 70.0, length(vWorldPos.xz - cameraPosition.xz));
           alpha *= edgeFade;
-          if (alpha < 0.02) discard;
+          if (alpha < 0.025) discard;
 
-          vec3 brightCloud = vec3(0.96, 0.98, 1.0);
-          vec3 darkStormCore = vec3(0.16, 0.19, 0.25);
-          vec3 baseCol = mix(brightCloud, darkStormCore, clamp(uCloudDarkness * (1.1 - accumLight * 0.35), 0.0, 1.0));
-          // Internal lightning illumination near storm core
-          float boltGlow = uLightningFlash * smoothstep(65.0, 0.0, stormDist);
-          baseCol += vec3(0.75, 0.88, 1.0) * boltGlow;
+          // Beer-Lambert extinction + Henyey-Greenstein / silver-lining powder scattering
+          float beerLambert = exp(-accumDensity * 1.55);
+          float powderEffect = 1.0 - exp(-accumDensity * 2.9);
+          float lightFactor = clamp(beerLambert * 0.7 + powderEffect * 0.45 + accumLight * 0.22, 0.0, 1.0);
 
-          gl_FragColor = vec4(baseCol, alpha);
+          vec3 sunlitAnvilTop = vec3(0.97, 0.99, 1.0);
+          vec3 midCumulus = vec3(0.68, 0.75, 0.84);
+          vec3 darkMesocycloneBase = vec3(0.11, 0.14, 0.20);
+
+          vec3 cloudCol = mix(darkMesocycloneBase, midCumulus, lightFactor);
+          cloudCol = mix(cloudCol, sunlitAnvilTop, clamp((1.0 - uCloudDarkness) * lightFactor * 1.25, 0.0, 1.0));
+          // Darken wall cloud core under supercell / tornado
+          float coreDarkening = smoothstep(68.0, 6.0, stormDist) * uCloudDarkness * 0.55;
+          cloudCol = mix(cloudCol, darkMesocycloneBase * 0.75, clamp(coreDarkening, 0.0, 0.85));
+
+          // Internal intra-cloud sheet lightning illumination
+          float boltGlow = uLightningFlash * smoothstep(78.0, 0.0, stormDist);
+          cloudCol += vec3(0.78, 0.90, 1.0) * boltGlow;
+
+          gl_FragColor = vec4(cloudCol, alpha);
         }
       `,
     });
 
-    // Multi-layer 3D Volumetric Cloud Canopy (Main Anvil Layer at Y=118 + Upper Cirrus/Cumulus at Y=132)
+    // Multi-layer ProtoManly's Weather 3D Volumetric Cloud Canopy + 3D Voxel Cumulonimbus / Wall Cloud Instanced Puffs
     const cloudGroup = new THREE.Group();
     const cloudLowerMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(380, 380, 32, 32),
+      new THREE.PlaneGeometry(410, 410, 40, 40),
       volumetricCloudMat
     );
     cloudLowerMesh.rotation.x = -Math.PI / 2;
-    cloudLowerMesh.position.y = 114;
+    cloudLowerMesh.position.y = 108;
     cloudLowerMesh.renderOrder = 1;
 
+    const cloudMidMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(410, 410, 28, 28),
+      volumetricCloudMat
+    );
+    cloudMidMesh.rotation.x = -Math.PI / 2;
+    cloudMidMesh.position.y = 120;
+    cloudMidMesh.renderOrder = 1;
+
     const cloudUpperMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(380, 380, 16, 16),
+      new THREE.PlaneGeometry(410, 410, 20, 20),
       volumetricCloudMat
     );
     cloudUpperMesh.rotation.x = -Math.PI / 2;
-    cloudUpperMesh.position.y = 128;
+    cloudUpperMesh.position.y = 134;
     cloudUpperMesh.renderOrder = 1;
 
-    cloudGroup.add(cloudLowerMesh, cloudUpperMesh);
+    cloudGroup.add(cloudLowerMesh, cloudMidMesh, cloudUpperMesh);
     scene.add(cloudGroup);
+
+    // ProtoManly's Weather 3D Volumetric Voxel Cloud Puffs & Rotating Wall Cloud (`InstancedMesh`)
+    const MAX_PM_CLOUD_PUFFS = 120;
+    const pmCloudGeo = new THREE.BoxGeometry(1, 1, 1);
+    const pmCloudMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.92,
+      metalness: 0.02,
+      transparent: true,
+      opacity: 0.86,
+      depthWrite: false,
+    });
+    const pmWeatherCloudInstanced = new THREE.InstancedMesh(
+      pmCloudGeo,
+      pmCloudMat,
+      MAX_PM_CLOUD_PUFFS
+    );
+    pmWeatherCloudInstanced.frustumCulled = false;
+    pmWeatherCloudInstanced.renderOrder = 2;
+    scene.add(pmWeatherCloudInstanced);
+
+    const pmCloudPuffs = Array.from({ length: MAX_PM_CLOUD_PUFFS }, (_, i) => {
+      const isWallCloudBand = i < 42;
+      const ringAngle = (i / 42) * Math.PI * 2;
+      const ringRadius = 8 + (i % 6) * 4.2;
+      return {
+        isWallCloudBand,
+        ringAngle,
+        ringRadius,
+        ox: ((i * 97) % 180) - 90,
+        oy: isWallCloudBand ? 94 + (i % 4) * 3.0 : 108 + (i % 7) * 4.5,
+        oz: ((i * 151) % 180) - 90,
+        sx: isWallCloudBand ? 9 + (i % 4) * 3.5 : 14 + (i % 5) * 4.5,
+        sy: isWallCloudBand ? 4.2 + (i % 3) * 1.8 : 5.5 + (i % 4) * 2.8,
+        sz: isWallCloudBand ? 9 + (i % 3) * 3.5 : 14 + (i % 4) * 4.5,
+      };
+    });
 
     // Weather2 Remastered: 3D Storm Cell & Swirling Tornado / Hurricane Funnel (`InstancedMesh`)
     const tornadoGroup = new THREE.Group();
@@ -1095,6 +1301,9 @@ export default function App() {
       dx: ((i * 73) % 48) - 24,
       y: (i * 19) % 45,
       dz: ((i * 137) % 48) - 24,
+      vx: 0,
+      vy: -(14 + (i % 9) * 1.8),
+      vz: 0,
       speed: 14 + (i % 9) * 1.8,
     }));
 
@@ -1111,6 +1320,7 @@ export default function App() {
     scene.add(lightningBoltGroup);
     let lightningTimer = 2.5;
     let meteorImpactTimer = 3.2;
+    let windDebrisSpawnTimer = 0.0;
 
     // Primed TNT Entities List
     const primedTnts: PrimedTntEntity[] = [];
@@ -1517,6 +1727,12 @@ export default function App() {
         return;
       }
 
+      if (code === 'KeyK') {
+        e.preventDefault();
+        setActiveModal((m) => (m === 'shaders_mods' ? 'none' : 'shaders_mods'));
+        return;
+      }
+
       if (e.key === '/') {
         e.preventDefault();
         setActiveModal('command');
@@ -1763,7 +1979,147 @@ export default function App() {
           }
         }
 
-        // Update Physics Mod 3D Debris Pool
+        // Update Weather2 Remastered + ProtoManly's Weather (PMWeather) Simulation & Wind Field
+        const activeDisaster =
+          settingsRef.current.weather2Tornado && weatherStateRef.current === 'clear'
+            ? 'tornado_f1'
+            : weatherStateRef.current;
+        if (weather2Ref.current.activeDisaster !== activeDisaster) {
+          weather2Ref.current.setDisaster(activeDisaster);
+        }
+        weather2Ref.current.step(dt, elapsed);
+        const w2Meta = WEATHER2_DISASTERS[activeDisaster];
+        const windVec = weather2Ref.current.getWindVector();
+        const vortexSwirl = weather2Ref.current.computeVortexSwirl(windVec);
+
+        // Update chunk foliage wind sway uniforms
+        rtUniforms.uWindVec.value.set(windVec.vx, windVec.vz);
+        rtUniforms.uStormCenter.value.set(
+          weather2Ref.current.stormCenter.x,
+          weather2Ref.current.stormCenter.z
+        );
+
+        // Anchor 3D volumetric cloud canopy above player while advecting density via windOffset & windVec
+        cloudGroup.position.set(player.x, 0, player.z);
+        cloudUniforms.uTime.value = elapsed;
+        cloudUniforms.uWindOffset.value.set(
+          weather2Ref.current.windOffset.x,
+          weather2Ref.current.windOffset.y,
+          weather2Ref.current.windOffset.z
+        );
+        cloudUniforms.uWindVec.value.set(windVec.vx, windVec.vz);
+        cloudUniforms.uStormCenter.value.set(
+          weather2Ref.current.stormCenter.x,
+          weather2Ref.current.stormCenter.z
+        );
+        cloudUniforms.uCloudCoverage.value = w2Meta.cloudCoverage;
+        cloudUniforms.uCloudDarkness.value = w2Meta.cloudDarkness;
+        cloudUniforms.uAnvilHeight.value = w2Meta.anvilHeight;
+        cloudUniforms.uWallCloudLowering.value = w2Meta.wallCloudLowering;
+        cloudUniforms.uVortexSwirl.value = vortexSwirl;
+        cloudUniforms.uLightningFlash.value = Math.max(
+          0,
+          cloudUniforms.uLightningFlash.value - dt * 3.8
+        );
+
+        // Update ProtoManly's Weather 3D Volumetric Voxel Cloud Puffs & Rotating Wall Cloud (`pmWeatherCloudInstanced`)
+        const stormX = weather2Ref.current.stormCenter.x;
+        const stormZ = weather2Ref.current.stormCenter.z;
+        for (let i = 0; i < MAX_PM_CLOUD_PUFFS; i++) {
+          const puff = pmCloudPuffs[i];
+          let wx: number;
+          let wy: number;
+          let wz: number;
+          if (puff.isWallCloudBand) {
+            // Rotating Mesocyclone Wall Cloud & Feeder Band around stormCenter
+            const angle = puff.ringAngle + elapsed * (0.28 + vortexSwirl * 0.45);
+            const rad = puff.ringRadius * (0.85 + 0.25 * Math.sin(elapsed * 0.7 + i));
+            wx = stormX + Math.cos(angle) * rad;
+            wz = stormZ + Math.sin(angle) * rad;
+            wy = puff.oy - w2Meta.wallCloudLowering * 0.65;
+          } else {
+            // 3D Volumetric Cumulonimbus Puffs advecting with windOffset across the map
+            const wrapX = ((((puff.ox + weather2Ref.current.windOffset.x) % 180) + 180) % 180) - 90;
+            const wrapZ = ((((puff.oz + weather2Ref.current.windOffset.z) % 180) + 180) % 180) - 90;
+            wx = player.x + wrapX;
+            wz = player.z + wrapZ;
+            wy = puff.oy;
+          }
+          const density = weather2Ref.current.sampleVolumetricCloudDensity(wx, wy, wz);
+          if (density < 0.08) {
+            dummyPos.set(0, -999, 0);
+            dummyScale.set(0, 0, 0);
+          } else {
+            dummyPos.set(wx, wy, wz);
+            dummyRot.set(0, puff.isWallCloudBand ? elapsed * 0.25 * vortexSwirl : 0, 0);
+            dummyQuat.setFromEuler(dummyRot);
+            const scaleBoost = 0.65 + density * 0.85;
+            dummyScale.set(
+              puff.sx * scaleBoost,
+              puff.sy * (0.7 + density * (w2Meta.anvilHeight / 34.0)),
+              puff.sz * scaleBoost
+            );
+            const shade = Math.max(
+              0.16,
+              Math.min(0.98, 0.96 - w2Meta.cloudDarkness * (puff.isWallCloudBand ? 0.78 : 0.52))
+            );
+            dummyColor.setRGB(shade * 0.94, shade * 0.97, shade);
+            pmWeatherCloudInstanced.setColorAt(i, dummyColor);
+          }
+          dummyMatrix.compose(dummyPos, dummyQuat, dummyScale);
+          pmWeatherCloudInstanced.setMatrixAt(i, dummyMatrix);
+        }
+        pmWeatherCloudInstanced.instanceMatrix.needsUpdate = true;
+        if (pmWeatherCloudInstanced.instanceColor) {
+          pmWeatherCloudInstanced.instanceColor.needsUpdate = true;
+        }
+
+        // Continuously spawn ambient wind-blown grass blades, leaves & dust near player and disaster center
+        windDebrisSpawnTimer -= dt * (1.0 + windVec.speed * 0.18 + vortexSwirl * 1.4);
+        if (windDebrisSpawnTimer <= 0 && settingsRef.current.physicsMod) {
+          windDebrisSpawnTimer = 0.14;
+          const spawnCount = Math.min(5, Math.max(1, Math.floor(windVec.speed / 12 + vortexSwirl)));
+          for (let s = 0; s < spawnCount; s++) {
+            const p = debrisPool[debrisCursor];
+            debrisCursor = (debrisCursor + 1) % MAX_DEBRIS;
+            const nearStorm = s % 2 === 0 && vortexSwirl > 0.35;
+            const anchorX = nearStorm ? stormX : player.x;
+            const anchorZ = nearStorm ? stormZ : player.z;
+            const spread = nearStorm ? 18 : 22;
+            const sx = anchorX + (Math.random() - 0.5) * spread;
+            const sz = anchorZ + (Math.random() - 0.5) * spread;
+            const sy = engineRef.current.computeSurfaceY(Math.floor(sx), Math.floor(sz)) + 1.25;
+            const localW = weather2Ref.current.sampleLocalWindField(sx, sy, sz);
+
+            p.active = true;
+            p.x = sx;
+            p.y = sy + Math.random() * 1.5;
+            p.z = sz;
+            p.vx = localW.vx * 0.45 + (Math.random() - 0.5) * 2.2;
+            p.vy = 1.8 + localW.vy * 0.55 + Math.random() * 2.4;
+            p.vz = localW.vz * 0.45 + (Math.random() - 0.5) * 2.2;
+            p.rx = Math.random() * 6;
+            p.ry = Math.random() * 6;
+            p.scale = 0.55 + Math.random() * 0.45;
+            p.life = 2.2 + Math.random() * 1.6;
+            // Alternate between Dappled Grass green, Golden Poplar leaf gold, and Loam brown
+            if (s % 3 === 0) {
+              p.r = 0.36;
+              p.g = 0.68;
+              p.b = 0.25;
+            } else if (s % 3 === 1) {
+              p.r = 0.92;
+              p.g = 0.76;
+              p.b = 0.22;
+            } else {
+              p.r = 0.54;
+              p.g = 0.38;
+              p.b = 0.24;
+            }
+          }
+        }
+
+        // Update Physics Mod 3D Debris & Environment Grass/Leaf Particles coupled to Local Wind Field
         for (let i = 0; i < MAX_DEBRIS; i++) {
           const p = debrisPool[i];
           if (p.active) {
@@ -1773,19 +2129,26 @@ export default function App() {
               dummyPos.set(0, -999, 0);
               dummyScale.set(0, 0, 0);
             } else {
-              p.vy -= 18.0 * dt;
+              const localWind = weather2Ref.current.sampleLocalWindField(p.x, p.y, p.z);
+              // Aerodynamic drag & cyclonic updraft from local wind field near disaster center
+              p.vx += (localWind.vx * 0.68 - p.vx * 0.48) * dt * 2.6;
+              p.vz += (localWind.vz * 0.68 - p.vz * 0.48) * dt * 2.6;
+              p.vy += (localWind.vy * 1.35 - 13.5) * dt;
+
               p.x += p.vx * dt;
               p.y += p.vy * dt;
               p.z += p.vz * dt;
-              p.rx += 4 * dt;
-              p.ry += 5 * dt;
+              const spinRate = 4.0 + localWind.localSpeed * 0.28;
+              p.rx += spinRate * dt;
+              p.ry += (spinRate * 1.15) * dt;
+
               const floorY =
                 engineRef.current.computeSurfaceY(Math.floor(p.x), Math.floor(p.z)) + 1.12;
               if (p.y < floorY) {
                 p.y = floorY;
-                p.vy *= -0.42;
-                p.vx *= 0.72;
-                p.vz *= 0.72;
+                p.vy = Math.abs(p.vy) * 0.42 + localWind.vy * 0.25;
+                p.vx *= 0.78;
+                p.vz *= 0.78;
               }
               dummyPos.set(p.x, p.y, p.z);
               dummyRot.set(p.rx, p.ry, 0);
@@ -1803,39 +2166,6 @@ export default function App() {
         }
         debrisInstanced.instanceMatrix.needsUpdate = true;
         if (debrisInstanced.instanceColor) debrisInstanced.instanceColor.needsUpdate = true;
-
-        // Update Weather2 Remastered Simulation + 3D Volumetric Cloud Wind Advection
-        const activeDisaster =
-          settingsRef.current.weather2Tornado && weatherStateRef.current === 'clear'
-            ? 'tornado_f1'
-            : weatherStateRef.current;
-        if (weather2Ref.current.activeDisaster !== activeDisaster) {
-          weather2Ref.current.setDisaster(activeDisaster);
-        }
-        weather2Ref.current.step(dt, elapsed);
-        const w2Meta = WEATHER2_DISASTERS[activeDisaster];
-        const windVec = weather2Ref.current.getWindVector();
-
-        // Anchor 3D volumetric cloud canopy above player while advecting density via windOffset
-        cloudGroup.position.set(player.x, 0, player.z);
-        cloudUniforms.uTime.value = elapsed;
-        cloudUniforms.uWindOffset.value.set(
-          weather2Ref.current.windOffset.x,
-          weather2Ref.current.windOffset.y,
-          weather2Ref.current.windOffset.z
-        );
-        cloudUniforms.uStormCenter.value.set(
-          weather2Ref.current.stormCenter.x,
-          weather2Ref.current.stormCenter.z
-        );
-        cloudUniforms.uCloudCoverage.value = w2Meta.cloudCoverage;
-        cloudUniforms.uCloudDarkness.value = w2Meta.cloudDarkness;
-        cloudUniforms.uVortexSwirl.value =
-          w2Meta.vortexRadius > 0 ? (activeDisaster === 'tornado_f5' ? 1.35 : 1.0) : 0.0;
-        cloudUniforms.uLightningFlash.value = Math.max(
-          0,
-          cloudUniforms.uLightningFlash.value - dt * 3.8
-        );
 
         // Dynamic sky & fog tinting for sandstorm / supercell / hurricane
         if (engineRef.current.dimension === 'minecraft:overworld') {
@@ -1859,13 +2189,14 @@ export default function App() {
           tornadoGroup.position.set(tx, ty, tz);
 
           const maxFunnelR = w2Meta.vortexRadius;
+          const angularRate = 4.2 + vortexSwirl * 2.4;
           for (let i = 0; i < MAX_TORNADO_DEBRIS; i++) {
             const hRatio = i / MAX_TORNADO_DEBRIS;
             const funnelRadius = 0.8 + Math.pow(hRatio, 1.35) * maxFunnelR;
-            const angle = elapsed * (6.2 - hRatio * 2.2) + i * 0.7;
+            const angle = elapsed * (angularRate - hRatio * 1.8) + i * 0.7;
             dummyPos.set(
               Math.cos(angle) * funnelRadius,
-              hRatio * 26,
+              hRatio * 28,
               Math.sin(angle) * funnelRadius
             );
             dummyRot.set(angle, angle * 0.5, 0);
@@ -1878,18 +2209,19 @@ export default function App() {
 
           // Tangential + inward suction force when player is near vortex
           if (gameModeRef.current === 'survival') {
-            const dx = tx - player.x;
-            const dz = tz - player.z;
-            const dist = Math.hypot(dx, dz) || 1;
-            if (dist < maxFunnelR * 3.2) {
-              const pull = (1 - dist / (maxFunnelR * 3.2)) * w2Meta.vortexSuctionStrength * dt;
-              player.x += (dx / dist) * pull * 0.35 + windVec.vx * dt * 0.05;
-              player.z += (dz / dist) * pull * 0.35 + windVec.vz * dt * 0.05;
+            const localPlayerWind = weather2Ref.current.sampleLocalWindField(
+              player.x,
+              player.y,
+              player.z
+            );
+            if (localPlayerWind.stormProximity > 0.1) {
+              player.x += localPlayerWind.vx * dt * 0.14;
+              player.z += localPlayerWind.vz * dt * 0.14;
             }
           }
         }
 
-        // Update Weather2 Precipitation (Rain, Hailstones, Sandstorm Dust, Falling Meteors)
+        // Update Weather2 Precipitation Velocity (`precipInstanced`) from `windVec` & Local Wind Field
         const showPrecip = w2Meta.precipitationType !== 'none';
         precipInstanced.visible = showPrecip;
         if (showPrecip) {
@@ -1914,32 +2246,53 @@ export default function App() {
               dummyScale.set(0, 0, 0);
             } else {
               const pt = precipParticles[i];
+              const wx = player.x + pt.dx;
+              const wy = player.y + pt.y;
+              const wz = player.z + pt.dz;
+              const localW = weather2Ref.current.sampleLocalWindField(wx, wy, wz);
+
+              // Update particle velocity directly from windVec + local vortex wind field
+              const targetVx = windVec.vx * 0.55 + (localW.vx - windVec.vx) * 0.75;
+              const targetVz = windVec.vz * 0.55 + (localW.vz - windVec.vz) * 0.75;
+              pt.vx += (targetVx - pt.vx) * Math.min(1, dt * 6.0);
+              pt.vz += (targetVz - pt.vz) * Math.min(1, dt * 6.0);
+
               if (w2Meta.precipitationType === 'sand') {
-                pt.dx = ((pt.dx + windVec.vx * dt * 0.65 + 24) % 48) - 24;
-                pt.dz = ((pt.dz + windVec.vz * dt * 0.65 + 24) % 48) - 24;
-                pt.y = (pt.y - dt * 2.2 + 24) % 24;
-                dummyScale.set(1.9, 0.32, 1.9);
+                pt.vy = -2.4 + localW.vy * 0.25;
+                pt.dx = ((pt.dx + pt.vx * dt + 24) % 48 + 48) % 48 - 24;
+                pt.dz = ((pt.dz + pt.vz * dt + 24) % 48 + 48) % 48 - 24;
+                pt.y = ((pt.y + pt.vy * dt + 24) % 24 + 24) % 24;
+                dummyScale.set(1.9, 0.34, 1.9);
               } else if (w2Meta.precipitationType === 'hail') {
-                pt.y -= pt.speed * 1.15 * dt;
-                pt.dx = ((pt.dx + windVec.vx * dt * 0.25 + 24) % 48) - 24;
-                pt.dz = ((pt.dz + windVec.vz * dt * 0.25 + 24) % 48) - 24;
+                pt.vy = -pt.speed * 1.18 + localW.vy * 0.2;
+                pt.dx = ((pt.dx + pt.vx * dt * 0.45 + 24) % 48 + 48) % 48 - 24;
+                pt.dz = ((pt.dz + pt.vz * dt * 0.45 + 24) % 48 + 48) % 48 - 24;
+                pt.y += pt.vy * dt;
                 if (pt.y < -4) pt.y = 36;
-                dummyScale.set(1.45, 0.42, 1.45);
+                dummyScale.set(1.45, 0.45, 1.45);
               } else if (w2Meta.precipitationType === 'meteor') {
-                pt.y -= pt.speed * 1.25 * dt;
-                pt.dx = ((pt.dx + windVec.vx * dt * 0.4 + 24) % 48) - 24;
-                pt.dz = ((pt.dz + windVec.vz * dt * 0.4 + 24) % 48) - 24;
+                pt.vy = -pt.speed * 1.25;
+                pt.dx = ((pt.dx + pt.vx * dt * 0.5 + 24) % 48 + 48) % 48 - 24;
+                pt.dz = ((pt.dz + pt.vz * dt * 0.5 + 24) % 48 + 48) % 48 - 24;
+                pt.y += pt.vy * dt;
                 if (pt.y < -2) pt.y = 44;
                 dummyScale.set(2.4, 1.6, 2.4);
               } else {
-                pt.y -= pt.speed * dt;
-                pt.dx = ((pt.dx + windVec.vx * dt * 0.22 + 24) % 48) - 24;
-                pt.dz = ((pt.dz + windVec.vz * dt * 0.22 + 24) % 48) - 24;
+                pt.vy = -pt.speed + localW.vy * 0.18;
+                pt.dx = ((pt.dx + pt.vx * dt * 0.42 + 24) % 48 + 48) % 48 - 24;
+                pt.dz = ((pt.dz + pt.vz * dt * 0.42 + 24) % 48 + 48) % 48 - 24;
+                pt.y += pt.vy * dt;
                 if (pt.y < -4) pt.y = 36;
-                dummyScale.set(0.65, 1.35, 0.65);
+                dummyScale.set(0.65, 1.4, 0.65);
               }
               dummyPos.set(player.x + pt.dx, player.y + pt.y, player.z + pt.dz);
-              dummyRot.set(0, 0, -windVec.vx * 0.015);
+              // Tilt precipitation streak along its live velocity vector (pt.vx, pt.vy, pt.vz)
+              const fallSpeed = Math.max(4.0, -pt.vy);
+              dummyRot.set(
+                Math.atan2(pt.vz, fallSpeed) * 0.55,
+                0,
+                -Math.atan2(pt.vx, fallSpeed) * 0.55
+              );
               dummyQuat.setFromEuler(dummyRot);
             }
             dummyMatrix.compose(dummyPos, dummyQuat, dummyScale);
@@ -2228,6 +2581,45 @@ export default function App() {
           blastFlashIntensity={blastFlashHud}
           enhancedVisuals={settings.enhancedVisuals}
           lastToast={lastToast}
+          activeShaderPackName={activeShaderPack.name}
+          onOpenShadersAndMods={() => setActiveModal('shaders_mods')}
+        />
+      )}
+
+      {/* Java Edition Shader Packs (Iris/OptiFine .zip) & Java Mods (.jar / .zip) Modal */}
+      {activeModal === 'shaders_mods' && (
+        <JavaShadersAndModsModal
+          shaderPacks={shaderPacks}
+          activeShaderPackId={activeShaderPack.id}
+          onSelectShaderPack={(pack) => {
+            setActiveShaderPack(pack);
+            showToast(`Java Shader Pack Applied: ${pack.name}`);
+          }}
+          onAddShaderPack={(pack) => {
+            setShaderPacks((prev) => [pack, ...prev]);
+          }}
+          onUpdateActiveShaderPack={(updated) => {
+            setActiveShaderPack(updated);
+            setShaderPacks((prev) =>
+              prev.map((p) => (p.id === updated.id ? updated : p))
+            );
+          }}
+          loadedJavaMods={loadedJavaMods}
+          onAddLoadedJavaMod={(mod) => {
+            setLoadedJavaMods((prev) => [mod, ...prev.filter((m) => m.modId !== mod.modId)]);
+            setAllBlocks(Array.from(engineRef.current.blocksByNum.values()));
+          }}
+          onEquipModBlockToHotbar={(blockDef) => {
+            setAllBlocks(Array.from(engineRef.current.blocksByNum.values()));
+            setHotbarIds((prev) => {
+              const next = [...prev];
+              next[selectedSlot] = blockDef.numericId;
+              return next;
+            });
+            showToast(`Equipped Java Mod Block: ${blockDef.name} (${blockDef.id}) in Slot ${selectedSlot + 1}`);
+          }}
+          engine={engineRef.current}
+          onClose={() => setActiveModal('none')}
         />
       )}
 

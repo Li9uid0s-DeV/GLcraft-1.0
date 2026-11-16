@@ -110,6 +110,7 @@ test('Weather2 3D volumetric cloud layer advects with wind vectors and scales ac
   sim.setDisaster('clear');
   const initialWind = sim.getWindVector();
   assert.ok(initialWind.speed >= 3 && initialWind.speed <= 8);
+  const clearSwirl = sim.computeVortexSwirl(initialWind);
 
   const prevOffsetX = sim.windOffset.x;
   sim.step(1.0, 10.0);
@@ -119,8 +120,49 @@ test('Weather2 3D volumetric cloud layer advects with wind vectors and scales ac
   sim.setDisaster('tornado_f5');
   sim.step(0.5, 11.0);
   const f5Wind = sim.getWindVector();
+  const f5Swirl = sim.computeVortexSwirl(f5Wind);
   const f5Density = sim.sampleVolumetricCloudDensity(sim.stormCenter.x, 140, sim.stormCenter.z);
   assert.ok(f5Wind.speed > initialWind.speed, 'EF5 Tornado wind speed must exceed clear weather wind');
+  assert.ok(f5Swirl > clearSwirl * 3, 'EF5 vortexSwirl uniform must scale up with windVec and disaster intensity');
   assert.ok(f5Density >= clearDensity, 'EF5 storm core must increase 3D volumetric cloud density');
+
+  const nearField = sim.sampleLocalWindField(sim.stormCenter.x + 5, 70, sim.stormCenter.z + 5);
+  const farField = sim.sampleLocalWindField(sim.stormCenter.x + 120, 70, sim.stormCenter.z + 120);
+  assert.ok(nearField.localSpeed > farField.localSpeed, 'Local wind field must intensify near disaster center');
+  assert.ok(nearField.vy > 1.0, 'Local wind field must produce vertical updraft near storm core');
 });
+
+test('Java Shader Pack (Iris/OptiFine) parser and Java Mod (.jar) loader register blocks & recipes', async () => {
+  const { parseJavaShaderPackFromEntries } = await import('./javaShaderPackEngine');
+  const { BUILTIN_JAVA_MOD_JARS, installBuiltinJavaModPreset } = await import(
+    './javaModLoaderEngine'
+  );
+
+  const enc = new TextEncoder();
+  const fakeZipEntries = new Map<string, Uint8Array>([
+    [
+      'BSL_v8.3/shaders/shaders.properties',
+      enc.encode('#define WAVING_LEAVES\n#define PUDDLE_REFLECTIONS\nsunPathRotation=-42.5\nambientOcclusionLevel=0.88'),
+    ],
+    [
+      'BSL_v8.3/shaders/gbuffers_terrain.fsh',
+      enc.encode('#version 330 compatibility\n#include "/lib/common.glsl"\nvoid main() {}'),
+    ],
+    ['BSL_v8.3/shaders/lib/common.glsl', enc.encode('const float sunPathRotation = -42.5;')],
+  ]);
+
+  const parsedShader = parseJavaShaderPackFromEntries(fakeZipEntries, 'BSL_v8.3.zip');
+  assert.equal(parsedShader.sunPathRotation, -42.5);
+  assert.equal(parsedShader.ambientOcclusionLevel, 0.88);
+  assert.ok(parsedShader.wavingFoliageAmp > 1.0);
+
+  const engine = new VoxelEngineCore(42, 'normal', 3);
+  const beforeRecipeCount = engine.recipes.length;
+  const modSummary = installBuiltinJavaModPreset(BUILTIN_JAVA_MOD_JARS[0], engine);
+  assert.ok(modSummary.addedBlocks.length >= 4);
+  assert.ok(engine.blocksById.has('twilightforest:aurora_block'));
+  assert.ok(engine.recipes.length > beforeRecipeCount);
+});
+
+
 

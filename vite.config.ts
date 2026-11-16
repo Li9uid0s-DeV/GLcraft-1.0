@@ -26,6 +26,27 @@ export default defineConfig(() => {
           if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
             fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
           }
+          // Also populate public/gh-pages-bundle.{js,css} so GitHub Pages "Deploy from a branch (main)"
+          // works immediately even if the user hasn't switched GitHub Pages source to GitHub Actions.
+          const assetsDir = path.resolve(distDir, 'assets');
+          const pubDir = path.resolve(__dirname, 'public');
+          if (fs.existsSync(assetsDir) && fs.existsSync(pubDir)) {
+            const files = fs.readdirSync(assetsDir);
+            const jsFile = files.find((f) => f.endsWith('.js'));
+            const cssFile = files.find((f) => f.endsWith('.css'));
+            if (jsFile) {
+              fs.copyFileSync(
+                path.resolve(assetsDir, jsFile),
+                path.resolve(pubDir, 'gh-pages-bundle.js')
+              );
+            }
+            if (cssFile) {
+              fs.copyFileSync(
+                path.resolve(assetsDir, cssFile),
+                path.resolve(pubDir, 'gh-pages-bundle.css')
+              );
+            }
+          }
         },
       },
     ],
